@@ -1,0 +1,350 @@
+openapi: 3.1.0
+info:
+  title: Testify API
+  version: 1.0.0
+  description: Versioned JSON:API for Testify quality-assurance resources.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+paths:
+  /auth/tokens:
+    post:
+      security: []
+      summary: Create a 30-day API token
+      requestBody:
+        required: true
+        content:
+          application/vnd.api+json:
+            schema:
+              $ref: '#/components/schemas/TokenLoginDocument'
+      responses:
+        '201':
+          description: Token created
+          content:
+            application/vnd.api+json:
+              schema:
+                $ref: '#/components/schemas/JsonApiDocument'
+        '401':
+          $ref: '#/components/responses/Error'
+  /auth/token:
+    delete:
+      summary: Revoke the current token
+      responses:
+        '204':
+          description: Token revoked
+  /users/me:
+    get:
+      summary: Current user profile
+      responses:
+        '200':
+          $ref: '#/components/responses/Resource'
+    patch:
+      summary: Update current user profile
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/JsonApi'
+      responses:
+        '200':
+          $ref: '#/components/responses/Resource'
+        '412':
+          $ref: '#/components/responses/Error'
+        '428':
+          $ref: '#/components/responses/Error'
+  /tokens:
+    get:
+      summary: List current user tokens
+      responses:
+        '200':
+          $ref: '#/components/responses/Collection'
+  /tokens/{token}:
+    delete:
+      summary: Revoke one owned token
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Token revoked
+  /projects:
+    get:
+      $ref: '#/components/pathItems/CollectionGet'
+    post:
+      $ref: '#/components/pathItems/CollectionPost'
+  /projects/{id}:
+    get:
+      $ref: '#/components/pathItems/ResourceGet'
+    patch:
+      $ref: '#/components/pathItems/ResourcePatch'
+    delete:
+      $ref: '#/components/pathItems/ResourceDelete'
+  /repository-modules:
+    get:
+      $ref: '#/components/pathItems/CollectionGet'
+    post:
+      $ref: '#/components/pathItems/CollectionPost'
+  /repository-modules/{id}:
+    get:
+      $ref: '#/components/pathItems/ResourceGet'
+    patch:
+      $ref: '#/components/pathItems/ResourcePatch'
+    delete:
+      $ref: '#/components/pathItems/ResourceDelete'
+  /test-plans:
+    get:
+      $ref: '#/components/pathItems/CollectionGet'
+    post:
+      $ref: '#/components/pathItems/CollectionPost'
+  /test-plans/{id}:
+    get:
+      $ref: '#/components/pathItems/ResourceGet'
+    patch:
+      $ref: '#/components/pathItems/ResourcePatch'
+    delete:
+      $ref: '#/components/pathItems/ResourceDelete'
+  /test-plans/{id}/test-cases:
+    get:
+      $ref: '#/components/pathItems/CollectionGet'
+  /test-plans/{id}/relationships/test-cases:
+    post:
+      $ref: '#/components/pathItems/CollectionPost'
+  /test-plans/{id}/relationships/test-cases/{testCase}:
+    delete:
+      $ref: '#/components/pathItems/ResourceDelete'
+  /test-cases:
+    get:
+      $ref: '#/components/pathItems/CollectionGet'
+    post:
+      summary: Atomically create a test case and its ordered steps
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/vnd.api+json:
+            schema:
+              $ref: '#/components/schemas/TestCaseCompoundDocument'
+      responses:
+        '201':
+          $ref: '#/components/responses/Resource'
+  /test-cases/{id}:
+    get:
+      $ref: '#/components/pathItems/ResourceGet'
+    patch:
+      $ref: '#/components/pathItems/ResourcePatch'
+    delete:
+      $ref: '#/components/pathItems/ResourceDelete'
+  /test-runs:
+    get:
+      $ref: '#/components/pathItems/CollectionGet'
+    post:
+      $ref: '#/components/pathItems/CollectionPost'
+  /test-runs/{id}:
+    get:
+      $ref: '#/components/pathItems/ResourceGet'
+    patch:
+      $ref: '#/components/pathItems/ResourcePatch'
+    delete:
+      $ref: '#/components/pathItems/ResourceDelete'
+  /test-runs/{id}/start:
+    post:
+      $ref: '#/components/pathItems/ActionPost'
+  /test-runs/{id}/case-results/{testCase}:
+    patch:
+      $ref: '#/components/pathItems/ResourcePatch'
+  /issues:
+    get:
+      $ref: '#/components/pathItems/CollectionGet'
+    post:
+      $ref: '#/components/pathItems/CollectionPost'
+  /issues/{id}:
+    get:
+      $ref: '#/components/pathItems/ResourceGet'
+    patch:
+      $ref: '#/components/pathItems/ResourcePatch'
+    delete:
+      $ref: '#/components/pathItems/ResourceDelete'
+  /openapi:
+    get:
+      summary: Download this OpenAPI document when API docs are enabled
+      responses:
+        '200':
+          description: OpenAPI YAML
+          content:
+            application/yaml:
+              schema:
+                type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        maxLength: 255
+  requestBodies:
+    JsonApi:
+      required: true
+      content:
+        application/vnd.api+json:
+          schema:
+            $ref: '#/components/schemas/JsonApiDocument'
+  responses:
+    Resource:
+      description: JSON:API resource document
+      headers:
+        ETag:
+          schema:
+            type: string
+        X-Request-ID:
+          schema:
+            type: string
+            format: uuid
+      content:
+        application/vnd.api+json:
+          schema:
+            $ref: '#/components/schemas/JsonApiDocument'
+    Collection:
+      description: Cursor-paginated JSON:API collection
+      content:
+        application/vnd.api+json:
+          schema:
+            $ref: '#/components/schemas/JsonApiDocument'
+    Error:
+      description: JSON:API error document
+      content:
+        application/vnd.api+json:
+          schema:
+            $ref: '#/components/schemas/ErrorDocument'
+  pathItems:
+    CollectionGet:
+      summary: List owned resources
+      parameters:
+        - name: page[cursor]
+          in: query
+          schema:
+            type: string
+        - name: page[size]
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: sort
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Collection'
+    CollectionPost:
+      summary: Create a resource
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/JsonApi'
+      responses:
+        '201':
+          $ref: '#/components/responses/Resource'
+    ResourceGet:
+      summary: Get an owned resource
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          $ref: '#/components/responses/Resource'
+        '404':
+          $ref: '#/components/responses/Error'
+    ResourcePatch:
+      summary: Update a resource
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/JsonApi'
+      responses:
+        '200':
+          $ref: '#/components/responses/Resource'
+        '412':
+          $ref: '#/components/responses/Error'
+        '428':
+          $ref: '#/components/responses/Error'
+    ResourceDelete:
+      summary: Soft-delete a resource
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Deleted
+    ActionPost:
+      summary: Perform an idempotent resource action
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          $ref: '#/components/responses/Resource'
+  schemas:
+    JsonApiDocument:
+      type: object
+      properties:
+        jsonapi:
+          type: object
+        data: {}
+        included:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+        links:
+          type: object
+        meta:
+          type: object
+    Resource:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+        id:
+          type: string
+        lid:
+          type: string
+        attributes:
+          type: object
+        relationships:
+          type: object
+    ErrorDocument:
+      type: object
+      required: [errors]
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            required: [status, code, title, detail]
+    TokenLoginDocument:
+      allOf:
+        - $ref: '#/components/schemas/JsonApiDocument'
+    TestCaseCompoundDocument:
+      allOf:
+        - $ref: '#/components/schemas/JsonApiDocument'

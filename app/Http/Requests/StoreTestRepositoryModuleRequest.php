@@ -1,0 +1,71 @@
+<?php
+
+namespace App\Http\Requests;
+
+use App\Models\TestRepositoryModule;
+use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
+
+class StoreTestRepositoryModuleRequest extends FormRequest
+{
+    /**
+     * Determine if the user is authorized to make this request.
+     */
+    public function authorize(): bool
+    {
+        return $this->user()?->can('create', TestRepositoryModule::class) ?? false;
+    }
+
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, ValidationRule|array<mixed>|string>
+     */
+    public function rules(): array
+    {
+        return [
+            'project_id' => [
+                'required',
+                'integer',
+                Rule::exists('projects', 'project_id')->where(
+                    'user_id',
+                    $this->user()?->id,
+                ),
+            ],
+            'parent_id' => ['nullable', 'integer', 'exists:test_repository_modules,id'],
+            'name' => ['required', 'string', 'max:255'],
+            'key_prefix' => ['required', 'string', 'max:20', 'regex:/^[A-Za-z0-9]+$/'],
+        ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'key_prefix' => strtoupper((string) $this->input('key_prefix')),
+        ]);
+    }
+
+    /**
+     * @return array<int, callable(Validator): void>
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                $parentId = $this->integer('parent_id');
+
+                if ($parentId === 0) {
+                    return;
+                }
+
+                $parent = TestRepositoryModule::query()->find($parentId);
+
+                if (! $parent || $parent->project_id !== $this->integer('project_id')) {
+                    $validator->errors()->add('parent_id', 'The selected parent folder does not belong to this project.');
+                }
+            },
+        ];
+    }
+}
