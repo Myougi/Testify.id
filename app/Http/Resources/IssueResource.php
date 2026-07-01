@@ -32,6 +32,13 @@ class IssueResource extends JsonResource
             'assignee' => $this->assignee,
             'environment' => $this->environment,
             'defect_type' => $this->defect_type,
+            'image' => $this->attachment ? [
+                'id' => $this->attachment->id,
+                'name' => $this->attachment->original_name,
+                'mime_type' => $this->attachment->mime_type,
+                'size' => $this->attachment->size,
+                'url' => route('issues.image', $this->id),
+            ] : null,
             'project' => [
                 'id' => $this->project_id,
                 'name' => $this->project?->project_name,

@@ -1,8 +1,10 @@
 <script lang="ts">
+    import X from 'lucide-svelte/icons/x';
     import type { Snippet } from 'svelte';
     import { getContext } from 'svelte';
     import { cn } from '@/lib/utils';
-    import { DIALOG_CONTEXT, type DialogContext } from './context';
+    import { DIALOG_CONTEXT } from './context';
+    import type { DialogContext } from './context';
 
     let { class: className = '', children }: { class?: string; children?: Snippet } = $props();
 
@@ -26,12 +28,22 @@
         <div
             id={id}
             class={cn(
-                'relative z-10 my-auto w-full max-w-lg rounded-lg border bg-background p-6 shadow-lg',
+                'relative z-10 my-auto w-full max-w-lg rounded-lg border bg-background p-6 pr-12 shadow-lg',
                 className,
             )}
             role="dialog"
             aria-modal="true"
         >
+            <button
+                id={`${id}-close`}
+                type="button"
+                class="ring-offset-background focus-visible:ring-ring absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none"
+                aria-label="Close dialog"
+                onclick={close}
+            >
+                <X class="size-4" />
+                <span class="sr-only">Close dialog</span>
+            </button>
             {@render children?.()}
         </div>
     </div>

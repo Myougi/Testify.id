@@ -98,6 +98,7 @@ test('repository page includes ai modal options for the active project only', fu
     $response->assertOk();
     $response->assertInertia(fn ($page) => $page
         ->component('test-repositories/Index')
+        ->where('initialPayload.options.aiGeneration.generationLimit', 20)
         ->where('initialPayload.options.aiGeneration.hasActiveProject', true)
         ->where('initialPayload.options.aiGeneration.activeProject.id', $activeProject->project_id)
         ->where('initialPayload.options.aiGeneration.activeProject.name', 'Checkout Suite')
@@ -146,6 +147,7 @@ test('repository api returns ai modal options for the active project only', func
         ->getJson(route('api.test-cases.index'));
 
     $response->assertOk();
+    $response->assertJsonPath('options.aiGeneration.generationLimit', 20);
     $response->assertJsonPath('options.aiGeneration.hasActiveProject', true);
     $response->assertJsonPath('options.aiGeneration.activeProject.id', $activeProject->project_id);
     $response->assertJsonPath('options.aiGeneration.testPlans.0.id', $activePlan->id);
@@ -595,6 +597,48 @@ test('bulk ai case creation creates multiple repository test cases', function ()
         'case_key' => 'TC-CHK-03',
         'title' => 'Generated checkout fail path',
     ]);
+});
+
+test('bulk ai case creation accepts the generation limit and rejects larger payloads', function (): void {
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user)->create();
+    $module = TestRepositoryModule::factory()->for($project, 'project')->create([
+        'key_prefix' => 'LIMIT',
+    ]);
+    $testPlan = TestPlan::factory()->for($project, 'project')->create();
+    $casePayload = static fn (int $index): array => [
+        'title' => 'Generated limit case '.$index,
+        'priority' => RepositoryTestCase::PRIORITY_MEDIUM,
+        'automation_status' => RepositoryTestCase::AUTOMATION_MANUAL,
+        'test_behavior' => RepositoryTestCase::BEHAVIOR_POSITIVE,
+        'test_type' => RepositoryTestCase::TYPE_FUNCTIONAL,
+        'preconditions' => null,
+        'steps' => [],
+    ];
+
+    $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $project->project_id])
+        ->postJson(route('api.test-cases.bulk-store'), [
+            'project_id' => $project->project_id,
+            'module_id' => $module->id,
+            'test_plan_id' => $testPlan->id,
+            'cases' => array_map($casePayload, range(1, 20)),
+        ])
+        ->assertCreated()
+        ->assertJsonPath('meta.created', 20);
+
+    $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $project->project_id])
+        ->postJson(route('api.test-cases.bulk-store'), [
+            'project_id' => $project->project_id,
+            'module_id' => $module->id,
+            'test_plan_id' => $testPlan->id,
+            'cases' => array_map($casePayload, range(1, 21)),
+        ])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['cases']);
+
+    $this->assertDatabaseCount('test_cases', 20);
 });
 
 test('bulk ai case creation does not create partial data when one case is invalid', function (): void {

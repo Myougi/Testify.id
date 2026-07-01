@@ -17,7 +17,7 @@ return new class extends Migration
                 ->constrained('test_plans')
                 ->cascadeOnDelete();
             $table->string('name');
-            $table->enum('environment', ['Development', 'Staging', 'UAT', 'Production']);
+            $table->enum('environment', ['Development', 'SIT', 'Staging', 'UAT', 'Production']);
             $table->enum('priority', ['Low', 'Medium', 'High', 'Urgent'])->default('Medium');
             $table->text('description')->nullable();
             $table->string('tester_name');

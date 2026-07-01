@@ -17,6 +17,7 @@
     import ArrowRight from 'lucide-svelte/icons/arrow-right';
     import Bug from 'lucide-svelte/icons/bug';
     import CalendarDays from 'lucide-svelte/icons/calendar-days';
+    import ImageIcon from 'lucide-svelte/icons/image';
     import Link2 from 'lucide-svelte/icons/link-2';
     import UserRound from 'lucide-svelte/icons/user-round';
     import AppHead from '@/components/AppHead.svelte';
@@ -94,6 +95,11 @@
 
     const valueOrFallback = (value: string | null): string =>
         value && value.trim() !== '' ? value : 'Not set';
+
+    const formatFileSize = (size: number): string =>
+        size >= 1024 * 1024
+            ? `${(size / (1024 * 1024)).toFixed(1)} MB`
+            : `${Math.max(1, Math.round(size / 1024))} KB`;
 </script>
 
 <AppHead title={initialIssue.title ?? initialIssue.issue_key} />
@@ -230,6 +236,44 @@
                     </div>
                 </div>
             </section>
+
+            {#if initialIssue.image}
+                <section
+                    class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                >
+                    <div
+                        class="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4"
+                    >
+                        <div class="flex items-center gap-2">
+                            <span
+                                class="flex size-8 items-center justify-center rounded-lg bg-[#eff5fb] text-[#002b57]"
+                            >
+                                <ImageIcon class="size-4" />
+                            </span>
+                            <div>
+                                <h2
+                                    class="text-sm font-semibold text-[#071a2f]"
+                                >
+                                    Issue Evidence
+                                </h2>
+                                <p class="mt-0.5 text-xs text-slate-500">
+                                    {initialIssue.image.name} - {formatFileSize(
+                                        initialIssue.image.size,
+                                    )}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 p-4 sm:p-5">
+                        <img
+                            src={initialIssue.image.url}
+                            alt={`Evidence for ${initialIssue.title ?? initialIssue.issue_key}`}
+                            class="max-h-[36rem] w-full rounded-lg border border-slate-200 bg-white object-contain"
+                        />
+                    </div>
+                </section>
+            {/if}
         </main>
 
         <aside class="space-y-4 xl:sticky xl:top-5 xl:self-start">

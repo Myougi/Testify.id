@@ -8,6 +8,7 @@ use App\Models\TestPlan;
 use App\Models\TestRepositoryModule;
 use App\Models\TestRun;
 use App\Models\User;
+use App\Services\TestCaseGenerationCountResolver;
 
 test('guests are redirected from the ai generation endpoint', function (): void {
     $this->postJson(route('api.ai.generate'), [
@@ -117,7 +118,6 @@ test('test case draft generation is scoped to the active project and normalizes 
             'prompt' => 'Create focused checkout regression cases.',
             'module_id' => $module->id,
             'test_plan_id' => $testPlan->id,
-            'count' => 2,
         ])
         ->assertOk()
         ->assertJsonPath('draft.cases.0.module_id', $module->id)
@@ -127,7 +127,9 @@ test('test case draft generation is scoped to the active project and normalizes 
         ->assertJsonPath('draft.cases.0.test_type', TestCase::TYPE_FUNCTIONAL)
         ->assertJsonPath('source_context.selected_module.id', $module->id)
         ->assertJsonPath('source_context.selected_test_plan.id', $testPlan->id)
-        ->assertJsonPath('source_context.requested_count', 2)
+        ->assertJsonPath('source_context.requested_count', null)
+        ->assertJsonPath('source_context.generated_count', 1)
+        ->assertJsonPath('source_context.generation_limit', 20)
         ->assertJsonFragment([
             'One or more generated test cases were assigned to the selected module because the AI returned an unavailable module.',
         ])
@@ -150,10 +152,134 @@ test('test case draft generation is scoped to the active project and normalizes 
 
     SeniorQualityAssuranceAgent::assertPrompted(function ($prompt) use ($module, $testPlan): bool {
         return $prompt->agent->artifactType === 'test_cases'
-            && $prompt->agent->requestedCount === 2
+            && $prompt->agent->requestedCount === null
+            && $prompt->agent->maximumTestCaseCount === 20
             && $prompt->agent->context['selected_module']['id'] === $module->id
             && $prompt->agent->context['selected_test_plan']['id'] === $testPlan->id;
     });
+});
+
+test('test case generation count resolver recognizes explicit totals and ignores unrelated numbers', function (
+    string $prompt,
+    ?int $requested,
+    ?int $effective,
+    bool $wasLimited,
+): void {
+    $resolution = app(TestCaseGenerationCountResolver::class)->resolve($prompt);
+
+    expect($resolution)
+        ->requested->toBe($requested)
+        ->effective->toBe($effective)
+        ->was_limited->toBe($wasLimited);
+})->with([
+    'numeric count' => ['Generate 1 test case for login.', 1, 1, false],
+    'word count' => ['Create five test cases for checkout.', 5, 5, false],
+    'total suffix' => ['Write 10 test cases total.', 10, 10, false],
+    'over limit' => ['Generate 25 test cases for payments.', 25, 20, true],
+    'unrelated browser count' => ['Generate test cases for 3 supported browsers.', null, null, false],
+]);
+
+test('an explicit test case count is enforced when the ai returns extra drafts', function (): void {
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user)->create();
+    $module = TestRepositoryModule::factory()->for($project, 'project')->create();
+    $testPlan = TestPlan::factory()->for($project, 'project')->create();
+
+    $generatedCase = static fn (string $title): array => [
+        'module_id' => $module->id,
+        'title' => $title,
+        'priority' => TestCase::PRIORITY_MEDIUM,
+        'automation_status' => TestCase::AUTOMATION_MANUAL,
+        'test_behavior' => TestCase::BEHAVIOR_POSITIVE,
+        'test_type' => TestCase::TYPE_FUNCTIONAL,
+        'preconditions' => null,
+        'steps' => [],
+    ];
+
+    SeniorQualityAssuranceAgent::fake([
+        [
+            'draft' => [
+                'cases' => [
+                    $generatedCase('Expected draft'),
+                    $generatedCase('Unexpected extra draft'),
+                ],
+            ],
+            'warnings' => [],
+        ],
+    ])->preventStrayPrompts();
+
+    $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $project->project_id])
+        ->postJson(route('api.ai.generate'), [
+            'artifact_type' => 'test_cases',
+            'prompt' => 'Generate one test case for login.',
+            'module_id' => $module->id,
+            'test_plan_id' => $testPlan->id,
+        ])
+        ->assertOk()
+        ->assertJsonCount(1, 'draft.cases')
+        ->assertJsonPath('draft.cases.0.title', 'Expected draft')
+        ->assertJsonPath('source_context.requested_count', 1)
+        ->assertJsonPath('source_context.generated_count', 1)
+        ->assertJsonPath('source_context.generation_limit', 20)
+        ->assertJsonFragment([
+            'The AI returned more than 1 test case, so extra drafts were removed.',
+        ]);
+
+    SeniorQualityAssuranceAgent::assertPrompted(function ($prompt): bool {
+        return $prompt->agent->requestedCount === 1
+            && $prompt->agent->maximumTestCaseCount === 20
+            && str_contains((string) $prompt->agent->instructions(), 'Produce exactly 1 practical test case draft.');
+    });
+});
+
+test('test case generation caps explicit and provider counts at the configured limit', function (): void {
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user)->create();
+    $module = TestRepositoryModule::factory()->for($project, 'project')->create();
+    $testPlan = TestPlan::factory()->for($project, 'project')->create();
+    $generatedCases = collect(range(1, 21))
+        ->map(fn (int $index): array => [
+            'module_id' => $module->id,
+            'title' => 'Generated case '.$index,
+            'priority' => TestCase::PRIORITY_MEDIUM,
+            'automation_status' => TestCase::AUTOMATION_MANUAL,
+            'test_behavior' => TestCase::BEHAVIOR_POSITIVE,
+            'test_type' => TestCase::TYPE_FUNCTIONAL,
+            'preconditions' => null,
+            'steps' => [],
+        ])
+        ->all();
+
+    SeniorQualityAssuranceAgent::fake([
+        [
+            'draft' => ['cases' => $generatedCases],
+            'warnings' => [],
+        ],
+    ])->preventStrayPrompts();
+
+    $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $project->project_id])
+        ->postJson(route('api.ai.generate'), [
+            'artifact_type' => 'test_cases',
+            'prompt' => 'Generate 25 test cases for checkout.',
+            'module_id' => $module->id,
+            'test_plan_id' => $testPlan->id,
+        ])
+        ->assertOk()
+        ->assertJsonCount(20, 'draft.cases')
+        ->assertJsonPath('source_context.requested_count', 25)
+        ->assertJsonPath('source_context.generated_count', 20)
+        ->assertJsonPath('source_context.generation_limit', 20)
+        ->assertJsonFragment([
+            'A request for 25 test cases exceeds the generation limit of 20, so the request was capped.',
+        ])
+        ->assertJsonFragment([
+            'The AI returned more than 20 test cases, so extra drafts were removed.',
+        ]);
+
+    SeniorQualityAssuranceAgent::assertPrompted(fn ($prompt): bool => $prompt->agent->requestedCount === 20
+        && $prompt->agent->maximumTestCaseCount === 20);
 });
 
 test('test case draft generation rejects foreign plan and module selections', function (): void {
@@ -276,6 +402,9 @@ test('issue draft generation relinks selected artifacts and does not create issu
         ]);
 
     $this->assertDatabaseCount('issues', 0);
+
+    SeniorQualityAssuranceAgent::assertPrompted(fn ($prompt): bool => $prompt->agent->artifactType === 'issues'
+        && $prompt->agent->requestedCount === 1);
 });
 
 test('report summary generation requires an active project and returns structured narrative', function (): void {

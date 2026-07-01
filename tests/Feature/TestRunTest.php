@@ -55,6 +55,8 @@ test('authenticated users can visit the test executions page', function (): void
         ->where('initialPayload.data.0.execution_summary.progress', 0)
         ->where('initialPayload.stats.totalRuns', 1)
         ->where('initialPayload.stats.activeRuns', 1)
+        ->where('initialPayload.options.environments.0', TestRun::ENVIRONMENT_DEVELOPMENT)
+        ->where('initialPayload.options.environments.1', TestRun::ENVIRONMENT_SIT)
         ->where('initialPayload.options.testPlans.0.test_cases.0.case_key', 'CORE-001'));
 });
 
@@ -147,7 +149,7 @@ test('users can create a test run with priority multiple selected plan cases and
         'test_plan_id' => $testPlan->id,
         'test_case_ids' => [$firstCase->id, $secondCase->id],
         'name' => 'Release Candidate Execution',
-        'environment' => TestRun::ENVIRONMENT_UAT,
+        'environment' => TestRun::ENVIRONMENT_SIT,
         'priority' => TestRun::PRIORITY_URGENT,
         'description' => 'Run candidate verification before release.',
         'tester_name' => 'Taylor Park',
@@ -165,7 +167,7 @@ test('users can create a test run with priority multiple selected plan cases and
     $this->assertDatabaseHas('test_runs', [
         'test_plan_id' => $testPlan->id,
         'name' => 'Release Candidate Execution',
-        'environment' => TestRun::ENVIRONMENT_UAT,
+        'environment' => TestRun::ENVIRONMENT_SIT,
         'priority' => TestRun::PRIORITY_URGENT,
         'tester_name' => 'Taylor Park',
         'status' => TestRun::STATUS_NEW,

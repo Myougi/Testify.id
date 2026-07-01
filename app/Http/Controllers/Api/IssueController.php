@@ -17,9 +17,7 @@ use Illuminate\Support\Facades\Gate;
 
 class IssueController extends Controller
 {
-    public function __construct(public IssueService $issueService)
-    {
-    }
+    public function __construct(public IssueService $issueService) {}
 
     /**
      * Display a listing of the resource.
@@ -99,7 +97,7 @@ class IssueController extends Controller
     {
         Gate::authorize('delete', $issue);
 
-        $issue->delete();
+        $this->issueService->delete($issue);
 
         return response()->json([
             'message' => 'Issue deleted.',

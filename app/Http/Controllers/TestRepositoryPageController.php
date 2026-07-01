@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Project;
 use App\Http\Resources\TestCaseCollection;
 use App\Http\Resources\TestCaseResource;
 use App\Http\Resources\TestRepositoryModuleResource;
+use App\Models\Project;
 use App\Models\TestCase;
+use App\Services\TestCaseGenerationCountResolver;
 use App\Services\TestRepositoryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -17,8 +18,8 @@ class TestRepositoryPageController extends Controller
 {
     public function __construct(
         public TestRepositoryService $testRepositoryService,
-    ) {
-    }
+        public TestCaseGenerationCountResolver $testCaseGenerationCountResolver,
+    ) {}
 
     /**
      * Display the repository workspace.
@@ -108,6 +109,7 @@ class TestRepositoryPageController extends Controller
             'behaviors' => TestCase::behaviors(),
             'types' => TestCase::types(),
             'aiGeneration' => [
+                'generationLimit' => $this->testCaseGenerationCountResolver->maximum(),
                 'hasActiveProject' => $activeProject instanceof Project,
                 'activeProject' => $activeProject instanceof Project
                     ? [

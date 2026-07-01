@@ -12,6 +12,7 @@ use App\Http\Resources\TestRepositoryModuleResource;
 use App\Models\Project;
 use App\Models\TestCase;
 use App\Models\TestPlan;
+use App\Services\TestCaseGenerationCountResolver;
 use App\Services\TestRepositoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,8 +22,8 @@ class TestCaseController extends Controller
 {
     public function __construct(
         public TestRepositoryService $testRepositoryService,
-    ) {
-    }
+        public TestCaseGenerationCountResolver $testCaseGenerationCountResolver,
+    ) {}
 
     /**
      * Display a listing of the resource.
@@ -180,6 +181,7 @@ class TestCaseController extends Controller
 
     /**
      * @return array{
+     *     generationLimit: int,
      *     hasActiveProject: bool,
      *     activeProject: array{id: int, name: string}|null,
      *     testPlans: array<int, array{id: int, name: string}>,
@@ -191,6 +193,7 @@ class TestCaseController extends Controller
         $activeProject = $this->activeProject($request);
 
         return [
+            'generationLimit' => $this->testCaseGenerationCountResolver->maximum(),
             'hasActiveProject' => $activeProject instanceof Project,
             'activeProject' => $activeProject instanceof Project
                 ? [

@@ -57,6 +57,7 @@ class StoreIssueRequest extends FormRequest
             'assignee' => ['nullable', 'string', 'max:255'],
             'environment' => ['nullable', 'string', Rule::in(Issue::environments())],
             'defect_type' => ['nullable', 'string', Rule::in(Issue::defectTypes())],
+            'image' => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ];
     }
 

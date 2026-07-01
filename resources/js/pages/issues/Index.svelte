@@ -23,8 +23,8 @@
     import Sparkles from 'lucide-svelte/icons/sparkles';
     import Trash2 from 'lucide-svelte/icons/trash-2';
     import { toast } from 'svelte-sonner';
-    import AppHead from '@/components/AppHead.svelte';
     import AiDraftDialog from '@/components/ai/AiDraftDialog.svelte';
+    import AppHead from '@/components/AppHead.svelte';
     import IssueForm from '@/components/issues/IssueForm.svelte';
     import { Button } from '@/components/ui/button';
     import {
@@ -39,9 +39,8 @@
         AiDraftApiError,
         generateAiDraft,
         summarizeAiSourceContext,
-        type IssueAiDraft,
-        type IssueAiDraftSet,
     } from '@/lib/api/ai';
+    import type { IssueAiDraft, IssueAiDraftSet } from '@/lib/api/ai';
     import {
         createIssue,
         deleteIssue,
@@ -156,6 +155,9 @@
     let editErrors = $state<Record<string, string>>({});
     let createProcessing = $state(false);
     let editProcessing = $state(false);
+    let createImage = $state<File | null>(null);
+    let editImage = $state<File | null>(null);
+    let editRemoveImage = $state(false);
     let deleteProcessing = $state(false);
     let statusUpdatingIssueId = $state<number | null>(null);
     let createAiOpen = $state(false);
@@ -281,6 +283,7 @@
 
     const resetCreateForm = (): void => {
         createValues = createDefaultValues(payload);
+        createImage = null;
         createErrors = {};
     };
 
@@ -326,6 +329,8 @@
 
     const hydrateEditForm = (issue: IssueItem): void => {
         editValues = issueToFormValues(issue);
+        editImage = null;
+        editRemoveImage = false;
         editErrors = {};
     };
 
@@ -359,7 +364,7 @@
         createErrors = {};
 
         try {
-            await createIssue(createValues);
+            await createIssue(createValues, createImage);
             toast.success('Issue created.');
             createOpen = false;
             resetCreateForm();
@@ -388,7 +393,10 @@
         editErrors = {};
 
         try {
-            await updateIssue(editingIssue.id, editValues);
+            await updateIssue(editingIssue.id, editValues, {
+                image: editImage,
+                removeImage: editRemoveImage,
+            });
             toast.success('Issue updated.');
             editingIssue = null;
             await reload({ page: filters.page });
@@ -904,7 +912,14 @@
     </div>
 </div>
 
-<Dialog bind:open={createOpen}>
+<Dialog
+    bind:open={createOpen}
+    onOpenChange={(open) => {
+        if (!open) {
+            resetCreateForm();
+        }
+    }}
+>
     <DialogContent
         class="max-h-[calc(100vh-2rem)] overflow-y-auto border-slate-200 bg-[#f8fbff] text-[#071a2f] sm:max-h-[90vh] sm:max-w-4xl"
     >
@@ -937,7 +952,12 @@
             statuses={payload.options.statuses}
             environments={payload.options.environments}
             defectTypes={payload.options.defectTypes}
+            selectedImage={createImage}
             submitLabel="Create Issue"
+            onimagechange={(image) => {
+                createImage = image;
+            }}
+            onremoveexistingimage={() => {}}
             onsubmit={submitCreate}
             oncancel={() => {
                 createOpen = false;
@@ -969,13 +989,17 @@
 
                 <div class="grid gap-3 md:grid-cols-2">
                     <div>
-                        <p class="text-xs font-semibold uppercase text-slate-500">
+                        <p
+                            class="text-xs font-semibold uppercase text-slate-500"
+                        >
                             Expected Result
                         </p>
                         <p>{draft.expected_result ?? 'Not provided'}</p>
                     </div>
                     <div>
-                        <p class="text-xs font-semibold uppercase text-slate-500">
+                        <p
+                            class="text-xs font-semibold uppercase text-slate-500"
+                        >
                             Actual Result
                         </p>
                         <p>{draft.actual_result ?? 'Not provided'}</p>
@@ -984,32 +1008,42 @@
 
                 <div class="grid gap-3">
                     <div>
-                        <p class="text-xs font-semibold uppercase text-slate-500">
+                        <p
+                            class="text-xs font-semibold uppercase text-slate-500"
+                        >
                             Reproduction Steps
                         </p>
                         <p>{draft.description}</p>
                     </div>
                     <div class="grid gap-3 md:grid-cols-2">
                         <div>
-                            <p class="text-xs font-semibold uppercase text-slate-500">
+                            <p
+                                class="text-xs font-semibold uppercase text-slate-500"
+                            >
                                 Reporter
                             </p>
                             <p>{draft.reporter}</p>
                         </div>
                         <div>
-                            <p class="text-xs font-semibold uppercase text-slate-500">
+                            <p
+                                class="text-xs font-semibold uppercase text-slate-500"
+                            >
                                 Assignee
                             </p>
                             <p>{draft.assignee ?? 'Not assigned'}</p>
                         </div>
                         <div>
-                            <p class="text-xs font-semibold uppercase text-slate-500">
+                            <p
+                                class="text-xs font-semibold uppercase text-slate-500"
+                            >
                                 Environment
                             </p>
                             <p>{draft.environment ?? 'Not provided'}</p>
                         </div>
                         <div>
-                            <p class="text-xs font-semibold uppercase text-slate-500">
+                            <p
+                                class="text-xs font-semibold uppercase text-slate-500"
+                            >
                                 Defect Type
                             </p>
                             <p>{draft.defect_type ?? 'Not provided'}</p>
@@ -1041,6 +1075,8 @@
     onOpenChange={(open) => {
         if (!open) {
             editingIssue = null;
+            editImage = null;
+            editRemoveImage = false;
             editErrors = {};
         }
     }}
@@ -1064,10 +1100,26 @@
                 statuses={payload.options.statuses}
                 environments={payload.options.environments}
                 defectTypes={payload.options.defectTypes}
+                selectedImage={editImage}
+                existingImage={editingIssue.image}
+                removeExistingImage={editRemoveImage}
                 submitLabel="Save Changes"
+                onimagechange={(image) => {
+                    editImage = image;
+
+                    if (image) {
+                        editRemoveImage = false;
+                    }
+                }}
+                onremoveexistingimage={() => {
+                    editImage = null;
+                    editRemoveImage = true;
+                }}
                 onsubmit={submitUpdate}
                 oncancel={() => {
                     editingIssue = null;
+                    editImage = null;
+                    editRemoveImage = false;
                     editErrors = {};
                 }}
             />

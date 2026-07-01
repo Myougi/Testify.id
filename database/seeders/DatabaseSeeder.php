@@ -4,8 +4,8 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -16,8 +16,6 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
         User::factory()->createMany([
             [
                 'name' => 'Admin Testify',
@@ -50,5 +48,7 @@ class DatabaseSeeder extends Seeder
                 'password' => Hash::make('Password123'),
             ],
         ]);
+
+        $this->call(ExistingDatabaseSnapshotSeeder::class);
     }
 }

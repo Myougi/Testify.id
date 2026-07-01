@@ -34,7 +34,12 @@ class StoreBulkTestCasesRequest extends FormRequest
             ],
             'module_id' => ['required', 'integer', 'exists:test_repository_modules,id'],
             'test_plan_id' => ['required', 'integer', 'exists:test_plans,id'],
-            'cases' => ['required', 'array', 'min:1', 'max:10'],
+            'cases' => [
+                'required',
+                'array',
+                'min:1',
+                'max:'.max(1, (int) config('ai.generation.test_cases.maximum_count', 20)),
+            ],
             'cases.*.title' => ['required', 'string', 'max:255'],
             'cases.*.priority' => ['required', 'string', Rule::in(TestCase::priorities())],
             'cases.*.automation_status' => ['required', 'string', Rule::in(TestCase::automationStatuses())],

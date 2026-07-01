@@ -1,7 +1,9 @@
 <script lang="ts">
+    import ImagePlus from 'lucide-svelte/icons/image-plus';
     import Link2 from 'lucide-svelte/icons/link-2';
     import ListTodo from 'lucide-svelte/icons/list-todo';
     import UserRound from 'lucide-svelte/icons/user-round';
+    import X from 'lucide-svelte/icons/x';
     import InputError from '@/components/InputError.svelte';
     import { Button } from '@/components/ui/button';
     import { Input } from '@/components/ui/input';
@@ -11,6 +13,7 @@
         IssueDefectType,
         IssueEnvironment,
         IssueFormValues,
+        IssueImage,
         IssuePlanOption,
         IssuePriority,
         IssueRunOption,
@@ -29,9 +32,14 @@
         statuses = [],
         environments = [],
         defectTypes = [],
+        selectedImage = null,
+        existingImage = null,
+        removeExistingImage = false,
         submitLabel,
         onsubmit,
         oncancel,
+        onimagechange,
+        onremoveexistingimage,
     }: {
         values: IssueFormValues;
         errors?: Record<string, string>;
@@ -43,10 +51,45 @@
         statuses?: IssueStatus[];
         environments?: IssueEnvironment[];
         defectTypes?: IssueDefectType[];
+        selectedImage?: File | null;
+        existingImage?: IssueImage | null;
+        removeExistingImage?: boolean;
         submitLabel: string;
         onsubmit: () => void;
         oncancel: () => void;
+        onimagechange: (image: File | null) => void;
+        onremoveexistingimage: () => void;
     } = $props();
+
+    let selectedImageUrl = $state<string | null>(null);
+
+    $effect(() => {
+        if (!selectedImage) {
+            selectedImageUrl = null;
+
+            return;
+        }
+
+        const objectUrl = URL.createObjectURL(selectedImage);
+        selectedImageUrl = objectUrl;
+
+        return () => URL.revokeObjectURL(objectUrl);
+    });
+
+    const formatFileSize = (size: number): string =>
+        size >= 1024 * 1024
+            ? `${(size / (1024 * 1024)).toFixed(1)} MB`
+            : `${Math.max(1, Math.round(size / 1024))} KB`;
+
+    const handleImageChange = (event: Event): void => {
+        const input = event.currentTarget as HTMLInputElement;
+        onimagechange(input.files?.[0] ?? null);
+    };
+
+    const prepareImageSelection = (event: MouseEvent): void => {
+        const input = event.currentTarget as HTMLInputElement;
+        input.value = '';
+    };
 
     const filteredRuns = $derived(
         values.test_plan_id === null
@@ -210,6 +253,135 @@
                     <InputError message={errors.status} />
                 </div>
             </div>
+        </div>
+    </section>
+
+    <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div
+            class="flex items-center gap-3 border-b border-slate-200 px-5 py-4"
+        >
+            <span
+                class="flex size-9 items-center justify-center rounded-xl bg-[#eff5fb] text-[#002b57]"
+            >
+                <ImagePlus class="size-4" />
+            </span>
+            <div>
+                <h3 class="text-sm font-semibold text-[#071a2f]">
+                    Issue Evidence
+                </h3>
+                <p class="text-xs text-slate-500">
+                    Add one JPG, PNG, or WebP image up to 5 MB.
+                </p>
+            </div>
+        </div>
+
+        <div class="px-5 py-5">
+            {#if selectedImage && selectedImageUrl}
+                <div
+                    class="overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
+                >
+                    <img
+                        src={selectedImageUrl}
+                        alt={selectedImage.name}
+                        class="max-h-72 w-full object-contain"
+                    />
+                    <div
+                        class="flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3"
+                    >
+                        <div class="min-w-0">
+                            <p
+                                class="truncate text-sm font-medium text-[#071a2f]"
+                            >
+                                {selectedImage.name}
+                            </p>
+                            <p class="text-xs text-slate-500">
+                                {formatFileSize(selectedImage.size)} - Ready to upload
+                            </p>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={processing}
+                            onclick={() => onimagechange(null)}
+                        >
+                            <X class="size-4" />
+                            Remove
+                        </Button>
+                    </div>
+                </div>
+            {:else if existingImage && !removeExistingImage}
+                <div
+                    class="overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
+                >
+                    <img
+                        src={existingImage.url}
+                        alt={existingImage.name}
+                        class="max-h-72 w-full object-contain"
+                    />
+                    <div
+                        class="flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3"
+                    >
+                        <div class="min-w-0">
+                            <p
+                                class="truncate text-sm font-medium text-[#071a2f]"
+                            >
+                                {existingImage.name}
+                            </p>
+                            <p class="text-xs text-slate-500">
+                                {formatFileSize(existingImage.size)} - Current image
+                            </p>
+                        </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={processing}
+                            onclick={onremoveexistingimage}
+                        >
+                            <X class="size-4" />
+                            Remove
+                        </Button>
+                    </div>
+                </div>
+            {:else}
+                <label
+                    for="issue_image"
+                    class="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-center transition-colors hover:border-[#002b57] hover:bg-[#f4f8fc]"
+                >
+                    <span
+                        class="flex size-11 items-center justify-center rounded-full bg-white text-[#002b57] shadow-sm"
+                    >
+                        <ImagePlus class="size-5" />
+                    </span>
+                    <span class="mt-3 text-sm font-semibold text-[#071a2f]">
+                        Choose an issue image
+                    </span>
+                    <span class="mt-1 text-xs text-slate-500">
+                        Screenshots and visual evidence work best.
+                    </span>
+                </label>
+            {/if}
+
+            <input
+                id="issue_image"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                class="sr-only"
+                disabled={processing}
+                onclick={prepareImageSelection}
+                onchange={handleImageChange}
+            />
+
+            {#if selectedImage || (existingImage && !removeExistingImage)}
+                <label
+                    for="issue_image"
+                    class="mt-3 inline-flex cursor-pointer text-sm font-semibold text-[#002b57] hover:underline"
+                >
+                    Replace image
+                </label>
+            {/if}
+            <InputError message={errors.image} />
         </div>
     </section>
 

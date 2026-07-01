@@ -1,6 +1,5 @@
 <script lang="ts">
     import { page } from '@inertiajs/svelte';
-    import Bell from 'lucide-svelte/icons/bell';
     import Breadcrumbs from '@/components/Breadcrumbs.svelte';
     import {
         Avatar,
@@ -52,15 +51,6 @@
         </div>
 
         <div class="ml-auto flex items-center gap-2">
-            <Button
-                variant="ghost"
-                size="icon"
-                class="size-10 rounded-full text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                aria-label="Notifications"
-            >
-                <Bell class="size-4" />
-            </Button>
-
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     {#snippet children(props)}

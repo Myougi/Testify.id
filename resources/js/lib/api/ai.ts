@@ -108,16 +108,26 @@ export type AiDraftResponse<TDraft> = {
     source_context: Record<string, unknown>;
 };
 
-export type AiDraftRequest = {
-    artifact_type: AiArtifactType;
+type AiDraftRequestBase = {
     prompt: string;
     project_id?: number | null;
     test_plan_id?: number | null;
     test_run_id?: number | null;
     module_id?: number | null;
-    count?: number | null;
     report_filters?: AiReportFilters | null;
 };
+
+export type AiDraftRequest = AiDraftRequestBase &
+    (
+        | {
+              artifact_type: 'issues';
+              count?: number | null;
+          }
+        | {
+              artifact_type: Exclude<AiArtifactType, 'issues'>;
+              count?: never;
+          }
+    );
 
 export class AiDraftApiError extends Error {
     public status: number;
@@ -179,6 +189,10 @@ export function summarizeAiSourceContext(
         typeof sourceContext.requested_count === 'number'
             ? sourceContext.requested_count
             : null;
+    const generatedCount =
+        typeof sourceContext.generated_count === 'number'
+            ? sourceContext.generated_count
+            : null;
 
     if (project?.name) {
         items.push(`Project: ${project.name}`);
@@ -200,7 +214,9 @@ export function summarizeAiSourceContext(
         );
     }
 
-    if (requestedCount !== null && requestedCount > 1) {
+    if (generatedCount !== null) {
+        items.push(`Generated: ${generatedCount}`);
+    } else if (requestedCount !== null && requestedCount > 1) {
         items.push(`Count: ${requestedCount}`);
     }
 

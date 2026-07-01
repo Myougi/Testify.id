@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Ai\Agents\SeniorQualityAssuranceAgent;
+use App\Models\Issue;
 use App\Models\Project;
 use App\Models\TestCase;
 use App\Models\TestPlan;
@@ -21,8 +22,8 @@ class AiGenerationService
 
     public function __construct(
         public ReportService $reportService,
-    ) {
-    }
+        public TestCaseGenerationCountResolver $testCaseGenerationCountResolver,
+    ) {}
 
     /**
      * @param  array{scope: string, plan_id: int|null, range: string, start_date: string, end_date: string, grouping: string, sections: array<int, string>}  $filters
@@ -52,12 +53,16 @@ class AiGenerationService
         $project = $this->resolveProject($user, $artifactType, $data, $activeProject);
         $selection = $this->resolveSelection($project, $artifactType, $data);
         $context = $this->buildContext($project, $artifactType, $data, $selection);
+        $prompt = trim((string) $data['prompt']);
+        $countResolution = $this->resolveGenerationCount($artifactType, $data, $prompt);
+        $maximumTestCaseCount = $this->testCaseGenerationCountResolver->maximum();
 
         $response = SeniorQualityAssuranceAgent::make(
             artifactType: $artifactType,
             context: $context,
-            requestedCount: $this->requestedCount($artifactType, $data),
-        )->prompt(trim((string) $data['prompt']));
+            requestedCount: $countResolution['effective'],
+            maximumTestCaseCount: $maximumTestCaseCount,
+        )->prompt($prompt);
 
         if (! $response instanceof StructuredAgentResponse) {
             throw new RuntimeException('The QA agent did not return structured output.');
@@ -76,11 +81,14 @@ class AiGenerationService
             $project,
             $selection,
             $user,
+            $countResolution['effective'],
+            $maximumTestCaseCount,
         );
 
         return [
             'draft' => $draft,
             'warnings' => array_values(array_unique([
+                ...$countResolution['warnings'],
                 ...$agentWarnings,
                 ...$normalizationWarnings,
             ])),
@@ -88,7 +96,9 @@ class AiGenerationService
                 $artifactType,
                 $project,
                 $selection,
-                $data,
+                $draft,
+                $countResolution['requested'],
+                $maximumTestCaseCount,
             ),
         ];
     }
@@ -227,10 +237,17 @@ class AiGenerationService
         Project $project,
         array $selection,
         User $user,
+        ?int $requestedCount,
+        int $maximumTestCaseCount,
     ): array {
         return match ($artifactType) {
             'test_plan' => $this->normalizeTestPlanDraft($draft),
-            'test_cases' => $this->normalizeTestCaseDrafts($draft, $project, $selection),
+            'test_cases' => $this->normalizeTestCaseDrafts(
+                $draft,
+                $project,
+                $selection,
+                $requestedCount ?? $maximumTestCaseCount,
+            ),
             'issues' => $this->normalizeIssueDrafts($draft, $project, $selection, $user),
             'report_summary' => $this->normalizeReportSummaryDraft($draft),
             default => [[], ['Unsupported AI draft artifact.']],
@@ -239,14 +256,16 @@ class AiGenerationService
 
     /**
      * @param  array{test_plan: TestPlan|null, test_run: TestRun|null, module: TestRepositoryModule|null, report_filters: array<string, mixed>|null}  $selection
-     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $draft
      * @return array<string, mixed>
      */
     private function buildSourceContext(
         string $artifactType,
         Project $project,
         array $selection,
-        array $data,
+        array $draft,
+        ?int $requestedCount,
+        int $maximumTestCaseCount,
     ): array {
         return [
             'artifact_type' => $artifactType,
@@ -273,7 +292,13 @@ class AiGenerationService
                     'key_prefix' => $selection['module']->key_prefix,
                 ]
                 : null,
-            'requested_count' => $this->requestedCount($artifactType, $data),
+            'requested_count' => $requestedCount,
+            'generated_count' => $artifactType === 'test_cases'
+                ? count($this->arrayItems($draft['cases'] ?? null))
+                : null,
+            'generation_limit' => $artifactType === 'test_cases'
+                ? $maximumTestCaseCount
+                : null,
             'report_filters' => $selection['report_filters'],
         ];
     }
@@ -395,7 +420,7 @@ class AiGenerationService
             ->latest()
             ->limit(5)
             ->get(['id', 'title', 'priority', 'severity', 'status', 'environment', 'defect_type'])
-            ->map(fn (\App\Models\Issue $issue): array => [
+            ->map(fn (Issue $issue): array => [
                 'id' => $issue->id,
                 'title' => $issue->title,
                 'priority' => $issue->priority,
@@ -447,11 +472,11 @@ class AiGenerationService
                 ]
                 : null,
             'allowed_values' => [
-                'priorities' => \App\Models\Issue::priorities(),
-                'severities' => \App\Models\Issue::severities(),
-                'statuses' => \App\Models\Issue::statuses(),
-                'environments' => \App\Models\Issue::environments(),
-                'defect_types' => \App\Models\Issue::defectTypes(),
+                'priorities' => Issue::priorities(),
+                'severities' => Issue::severities(),
+                'statuses' => Issue::statuses(),
+                'environments' => Issue::environments(),
+                'defect_types' => Issue::defectTypes(),
             ],
             'test_plans' => $testPlans,
             'test_runs' => $testRuns,
@@ -551,9 +576,14 @@ class AiGenerationService
      * @param  array{test_plan: TestPlan|null, test_run: TestRun|null, module: TestRepositoryModule|null, report_filters: array<string, mixed>|null}  $selection
      * @return array{0: array<string, mixed>, 1: array<int, string>}
      */
-    private function normalizeTestCaseDrafts(array $draft, Project $project, array $selection): array
-    {
+    private function normalizeTestCaseDrafts(
+        array $draft,
+        Project $project,
+        array $selection,
+        int $resultLimit,
+    ): array {
         $warnings = [];
+        $resultLimit = max(1, $resultLimit);
         $availableModuleIds = TestRepositoryModule::query()
             ->where('project_id', $project->project_id)
             ->pluck('id')
@@ -562,9 +592,17 @@ class AiGenerationService
             ? $selection['module']->id
             : ($availableModuleIds[0] ?? null);
 
-        $cases = collect($this->arrayItems($draft['cases'] ?? null))
+        $caseDrafts = collect($this->arrayItems($draft['cases'] ?? null))
             ->filter(fn (mixed $case): bool => is_array($case))
-            ->values()
+            ->values();
+
+        if ($caseDrafts->count() > $resultLimit) {
+            $caseLabel = $resultLimit === 1 ? 'test case' : 'test cases';
+            $warnings[] = 'The AI returned more than '.$resultLimit.' '.$caseLabel.', so extra drafts were removed.';
+        }
+
+        $cases = $caseDrafts
+            ->take($resultLimit)
             ->map(function (array $case, int $index) use ($availableModuleIds, $defaultModuleId, &$warnings): array {
                 $moduleId = isset($case['module_id']) ? (int) $case['module_id'] : null;
 
@@ -671,30 +709,30 @@ class AiGenerationService
                     'actual_result' => $this->nullableText($issue['actual_result'] ?? null),
                     'priority' => $this->normalizeEnum(
                         $issue['priority'] ?? null,
-                        \App\Models\Issue::priorities(),
-                        \App\Models\Issue::PRIORITY_MEDIUM,
+                        Issue::priorities(),
+                        Issue::PRIORITY_MEDIUM,
                         'A generated issue priority was reset to Medium.',
                         $warnings,
                     ),
                     'severity' => $this->normalizeEnum(
                         $issue['severity'] ?? null,
-                        \App\Models\Issue::severities(),
-                        \App\Models\Issue::SEVERITY_MEDIUM,
+                        Issue::severities(),
+                        Issue::SEVERITY_MEDIUM,
                         'A generated issue severity was reset to Medium.',
                         $warnings,
                     ),
-                    'status' => \App\Models\Issue::STATUS_OPEN,
+                    'status' => Issue::STATUS_OPEN,
                     'reporter' => $this->requiredText($issue['reporter'] ?? null, $user->name, 255),
                     'assignee' => $this->nullableText($issue['assignee'] ?? null, 255),
                     'environment' => $this->normalizeOptionalEnum(
                         $issue['environment'] ?? null,
-                        \App\Models\Issue::environments(),
+                        Issue::environments(),
                         'An invalid environment was removed from a generated issue.',
                         $warnings,
                     ),
                     'defect_type' => $this->normalizeOptionalEnum(
                         $issue['defect_type'] ?? null,
-                        \App\Models\Issue::defectTypes(),
+                        Issue::defectTypes(),
                         'An invalid defect type was removed from a generated issue.',
                         $warnings,
                     ),
@@ -710,9 +748,9 @@ class AiGenerationService
                 'description' => 'Describe the steps to reproduce this issue.',
                 'expected_result' => null,
                 'actual_result' => null,
-                'priority' => \App\Models\Issue::PRIORITY_MEDIUM,
-                'severity' => \App\Models\Issue::SEVERITY_MEDIUM,
-                'status' => \App\Models\Issue::STATUS_OPEN,
+                'priority' => Issue::PRIORITY_MEDIUM,
+                'severity' => Issue::SEVERITY_MEDIUM,
+                'status' => Issue::STATUS_OPEN,
                 'reporter' => $user->name,
                 'assignee' => null,
                 'environment' => null,
@@ -746,7 +784,6 @@ class AiGenerationService
 
     /**
      * @param  array<string, mixed>  $data
-     * @param  TestPlan|null  $selectedPlan
      * @return array{scope: string, plan_id: int|null, range: string, start_date: string, end_date: string, grouping: string, sections: array<int, string>}
      */
     private function resolveReportFilters(Project $project, array $data, ?TestPlan $selectedPlan): array
@@ -848,15 +885,36 @@ class AiGenerationService
 
     /**
      * @param  array<string, mixed>  $data
+     * @return array{requested: int|null, effective: int|null, warnings: array<int, string>}
      */
-    private function requestedCount(string $artifactType, array $data): int
+    private function resolveGenerationCount(string $artifactType, array $data, string $prompt): array
     {
-        $count = isset($data['count']) ? max(1, min(10, (int) $data['count'])) : 1;
+        if ($artifactType === 'test_cases') {
+            $resolution = $this->testCaseGenerationCountResolver->resolve($prompt);
+            $warnings = [];
 
-        return match ($artifactType) {
-            'test_cases', 'issues' => $count,
-            default => 1,
-        };
+            if ($resolution['was_limited'] && $resolution['requested'] !== null) {
+                $warnings[] = $resolution['requested'] > $this->testCaseGenerationCountResolver->maximum()
+                    ? 'A request for '.$resolution['requested'].' test cases exceeds the generation limit of '.$this->testCaseGenerationCountResolver->maximum().', so the request was capped.'
+                    : 'At least one test case must be generated, so the request was raised to one.';
+            }
+
+            return [
+                'requested' => $resolution['requested'],
+                'effective' => $resolution['effective'],
+                'warnings' => $warnings,
+            ];
+        }
+
+        $count = $artifactType === 'issues' && isset($data['count'])
+            ? max(1, min(10, (int) $data['count']))
+            : 1;
+
+        return [
+            'requested' => $count,
+            'effective' => $count,
+            'warnings' => [],
+        ];
     }
 
     private function normalizeDate(mixed $value): ?string
@@ -940,7 +998,6 @@ class AiGenerationService
     }
 
     /**
-     * @param  mixed  $value
      * @return array<int, string>
      */
     private function stringList(mixed $value, int $limit = 5): array

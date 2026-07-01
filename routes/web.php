@@ -1,12 +1,13 @@
 <?php
 
-use App\Http\Controllers\Api\TestCaseController;
 use App\Http\Controllers\Api\AiGenerationController;
 use App\Http\Controllers\Api\IssueController;
+use App\Http\Controllers\Api\TestCaseController;
 use App\Http\Controllers\Api\TestPlanController;
 use App\Http\Controllers\Api\TestRepositoryModuleController;
 use App\Http\Controllers\Api\TestRunController;
 use App\Http\Controllers\DashboardPageController;
+use App\Http\Controllers\IssueAttachmentController;
 use App\Http\Controllers\IssuePageController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ReportPageController;
@@ -42,6 +43,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('issues', 'index')->name('issues.index');
         Route::get('issues/{issue}', 'show')->name('issues.show');
     });
+    Route::get('issues/{issue}/image', IssueAttachmentController::class)
+        ->name('issues.image');
     Route::controller(ReportPageController::class)->group(function (): void {
         Route::get('reports', 'index')->name('reports.index');
         Route::post('reports/export', 'export')

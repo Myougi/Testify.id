@@ -3,6 +3,7 @@
 namespace App\Ai\Agents;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\JsonSchema\Types\ObjectType;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasStructuredOutput;
@@ -22,9 +23,9 @@ class SeniorQualityAssuranceAgent implements Agent, Conversational, HasStructure
     public function __construct(
         public string $artifactType,
         public array $context = [],
-        public int $requestedCount = 1,
-    ) {
-    }
+        public ?int $requestedCount = 1,
+        public int $maximumTestCaseCount = 20,
+    ) {}
 
     public function instructions(): Stringable|string
     {
@@ -40,26 +41,31 @@ class SeniorQualityAssuranceAgent implements Agent, Conversational, HasStructure
             'test_plan' => implode(PHP_EOL, [
                 '- Produce one realistic QA test plan draft.',
                 '- Keep status aligned to a draft workflow.',
-                '- Focus on scope, strategy, entry/exit criteria, and release readiness.',
+                '- Focus on scope/out of scope, testing strategy, entry/exit criteria, and release readiness.',
                 '- Use only allowed priority values from the provided context.',
             ]),
             'test_cases' => implode(PHP_EOL, [
-                '- Produce '.$this->requestedCount.' practical test case drafts unless the prompt clearly supports fewer.',
+                $this->requestedCount !== null
+                    ? '- Produce exactly '.$this->requestedCount.' practical test case draft'.($this->requestedCount === 1 ? '' : 's').'.'
+                    : '- Choose the smallest sufficient set of practical test case drafts, between 1 and '.$this->maximumTestCaseCount.'.',
                 '- Every case must be actionable, specific, and mapped to a module_id from context.',
                 '- Include ordered steps with clear expected results.',
-                '- Use only allowed priority, automation status, behavior, and type values from context.',
+                '- Use only allowed priority, behavior, and type values from context.',
+                '- Always include preconditions if they are relevant to the test case.',
+                '- Always include test data if it is relevant to the test case and write it in preconditions or steps.',
+                '- Never skip negative cases or edge cases unless the prompt clearly supports it.',
             ]),
             'issues' => implode(PHP_EOL, [
-                '- Produce '.$this->requestedCount.' issue draft'.($this->requestedCount === 1 ? '' : 's').'.',
+                '- Produce '.($this->requestedCount ?? 1).' issue draft'.($this->requestedCount === 1 ? '' : 's').'.',
                 '- Frame the description as reproducible steps and keep expected vs actual behavior explicit.',
                 '- Use only allowed priority, severity, environment, and defect type values from context.',
                 '- Prefer linking to the selected test plan or run only when the prompt and context support it.',
             ]),
             'report_summary' => implode(PHP_EOL, [
-                '- Summarize the provided QA metrics into concise leadership-ready analysis.',
+                '- Summarize the provided QA metrics into concise leadership ready analysis.',
                 '- Rank concrete quality risks from highest to lowest impact and support them with evidence from the report snapshot.',
                 '- Identify coverage gaps, issue patterns, and execution constraints that could delay project completion.',
-                '- Put the highest-value completion action first, followed by practical prioritized next actions.',
+                '- Put the highest value completion action first, followed by practical prioritized next actions.',
                 '- Do not invent metrics that are not present in the provided report snapshot.',
             ]),
             default => '- Produce a useful QA draft.',
@@ -73,10 +79,13 @@ class SeniorQualityAssuranceAgent implements Agent, Conversational, HasStructure
         return implode(PHP_EOL.PHP_EOL, [
             'You are a Senior Quality Assurance Engineer and Senior Quality Assurance Analyst.',
             'You generate practical, review-ready QA drafts for the Testify application.',
+            'Skeptical and thorough — assume every feature has negative cases and edge cases.',
+            'Apply boundary value analysis and equivalence partitioning instinctively.',
             'Return structured data only. Do not include markdown fences, prose outside schema fields, or explanations about the schema.',
             'Be concise, concrete, risk-aware, and realistic for a software QA workflow.',
             $artifactRules,
             'If information is missing, make the safest reasonable assumption and add a short note in warnings.',
+            'Use precise language — "click Submit button" not "submit the form"',
             'Project context and allowed values:',
             $context ?: '{}',
             'Generate a '.$artifactLabel.' that matches the schema exactly.',
@@ -120,7 +129,7 @@ class SeniorQualityAssuranceAgent implements Agent, Conversational, HasStructure
         ];
     }
 
-    private function testPlanDraftSchema(JsonSchema $schema): \Illuminate\JsonSchema\Types\ObjectType
+    private function testPlanDraftSchema(JsonSchema $schema): ObjectType
     {
         return $schema->object([
             'name' => $schema->string()->max(255)->required(),
@@ -136,8 +145,11 @@ class SeniorQualityAssuranceAgent implements Agent, Conversational, HasStructure
         ])->withoutAdditionalProperties();
     }
 
-    private function testCaseDraftSetSchema(JsonSchema $schema): \Illuminate\JsonSchema\Types\ObjectType
+    private function testCaseDraftSetSchema(JsonSchema $schema): ObjectType
     {
+        $minimumCount = $this->requestedCount ?? 1;
+        $maximumCount = $this->requestedCount ?? $this->maximumTestCaseCount;
+
         return $schema->object([
             'cases' => $schema->array()->items(
                 $schema->object([
@@ -167,11 +179,11 @@ class SeniorQualityAssuranceAgent implements Agent, Conversational, HasStructure
                         ])->withoutAdditionalProperties()
                     )->required(),
                 ])->withoutAdditionalProperties()
-            )->min(1)->required(),
+            )->min($minimumCount)->max($maximumCount)->required(),
         ])->withoutAdditionalProperties();
     }
 
-    private function issueDraftSetSchema(JsonSchema $schema): \Illuminate\JsonSchema\Types\ObjectType
+    private function issueDraftSetSchema(JsonSchema $schema): ObjectType
     {
         return $schema->object([
             'issues' => $schema->array()->items(
@@ -215,7 +227,7 @@ class SeniorQualityAssuranceAgent implements Agent, Conversational, HasStructure
         ])->withoutAdditionalProperties();
     }
 
-    private function reportSummarySchema(JsonSchema $schema): \Illuminate\JsonSchema\Types\ObjectType
+    private function reportSummarySchema(JsonSchema $schema): ObjectType
     {
         return $schema->object([
             'executive_summary' => $schema->string()->required(),

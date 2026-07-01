@@ -194,6 +194,7 @@
     ): string => {
         const classes: Record<TestRunItem['environment'], string> = {
             Development: 'border-sky-200 bg-sky-50 text-sky-700',
+            SIT: 'border-cyan-200 bg-cyan-50 text-cyan-700',
             Staging: 'border-violet-200 bg-violet-50 text-violet-700',
             UAT: 'border-amber-200 bg-amber-50 text-amber-700',
             Production: 'border-rose-200 bg-rose-50 text-rose-700',

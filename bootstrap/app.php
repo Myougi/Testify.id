@@ -1,11 +1,11 @@
 <?php
 
-use App\Http\Middleware\HandleAppearance;
-use App\Http\Middleware\HandleInertiaRequests;
-use App\Http\Middleware\Api\V1\AssignRequestId;
 use App\Http\Middleware\Api\V1\ApplySparseFields;
+use App\Http\Middleware\Api\V1\AssignRequestId;
 use App\Http\Middleware\Api\V1\EnsureJsonApi;
 use App\Http\Middleware\Api\V1\EnsureTokenAbility;
+use App\Http\Middleware\HandleAppearance;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Support\Api\V1\JsonApi;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -41,7 +41,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->render(function (\Throwable $exception, Request $request) {
+        $exceptions->render(function (Throwable $exception, Request $request) {
             if (! $request->is('api/v1/*')) {
                 return null;
             }
@@ -69,7 +69,15 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (Request $request) => $request->is('api/*'),
         );
 
-        $exceptions->respond(function (Response $response, \Throwable $exception, Request $request): Response {
+        $exceptions->respond(function (Response $response, Throwable $exception, Request $request): Response {
+            if ($response->getStatusCode() === 419 && $request->is('api/*') && ! $request->is('api/v1/*')) {
+                return response()->json([
+                    'message' => __('Your session expired. Please log in again.'),
+                    'code' => 'session_expired',
+                    'login_url' => route('login', ['expired' => 1], absolute: false),
+                ], 419);
+            }
+
             if ($response->getStatusCode() === 419 && ! $request->is('api/*')) {
                 return to_route('login')->with('status', __('Your session expired. Please log in again.'));
             }

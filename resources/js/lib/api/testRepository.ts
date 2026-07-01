@@ -117,6 +117,7 @@ export type TestRepositoryOptions = {
     behaviors: TestCaseBehavior[];
     types: TestCaseType[];
     aiGeneration: {
+        generationLimit: number;
         hasActiveProject: boolean;
         activeProject: TestRepositoryProjectOption | null;
         testPlans: TestRepositoryPlanOption[];

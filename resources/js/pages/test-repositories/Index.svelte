@@ -17,6 +17,7 @@
     import ChevronRight from 'lucide-svelte/icons/chevron-right';
     import ClipboardList from 'lucide-svelte/icons/clipboard-list';
     import Folder from 'lucide-svelte/icons/folder';
+    import Info from 'lucide-svelte/icons/info';
     import Pencil from 'lucide-svelte/icons/pencil';
     import Plus from 'lucide-svelte/icons/plus';
     import Search from 'lucide-svelte/icons/search';
@@ -91,6 +92,7 @@
             behaviors: [...payload.options.behaviors],
             types: [...payload.options.types],
             aiGeneration: {
+                generationLimit: payload.options.aiGeneration.generationLimit,
                 hasActiveProject: payload.options.aiGeneration.hasActiveProject,
                 activeProject: payload.options.aiGeneration.activeProject
                     ? { ...payload.options.aiGeneration.activeProject }
@@ -124,7 +126,6 @@
     let moduleErrors = $state<Record<string, string>>({});
     let aiOpen = $state(false);
     let aiPrompt = $state('');
-    let aiDraftCount = $state(3);
     let aiSelectedTestPlanId = $state<number | null>(null);
     let aiSelectedModuleId = $state<number | null>(null);
     let aiProcessing = $state(false);
@@ -359,7 +360,6 @@
 
     const resetAiState = (): void => {
         aiPrompt = '';
-        aiDraftCount = 3;
         aiSelectedTestPlanId = null;
         aiSelectedModuleId =
             filters.module_id &&
@@ -433,7 +433,6 @@
                 project_id: aiGeneration.activeProject.id,
                 test_plan_id: aiSelectedTestPlanId,
                 module_id: aiSelectedModuleId,
-                count: aiDraftCount,
             });
 
             aiDraftSet = response.draft;
@@ -1022,68 +1021,57 @@
 </div>
 
 {#snippet aiControls()}
-    <div class="grid gap-4 md:grid-cols-3">
-        <div class="grid gap-2">
-            <Label for="repository-ai-test-plan">Test Plan</Label>
-            <select
-                id="repository-ai-test-plan"
-                class="flex h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-[#071a2f] outline-none focus:border-[#002b57] focus:ring-3 focus:ring-[#002b57]/15"
-                value={aiSelectedTestPlanId ?? ''}
-                onchange={(event) => {
-                    aiSelectedTestPlanId =
-                        Number((event.currentTarget as HTMLSelectElement).value) ||
-                        null;
-                }}
-            >
-                <option value="">Select test plan</option>
-                {#each aiGeneration.testPlans as testPlan (testPlan.id)}
-                    <option value={testPlan.id}>{testPlan.name}</option>
-                {/each}
-            </select>
+    <div class="grid gap-4">
+        <div
+            class="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600"
+        >
+            <Info class="mt-0.5 size-4 shrink-0 text-[#002b57]" />
+            <p>
+                AI can generate up to {aiGeneration.generationLimit} test cases per
+                request. Specify a number in your prompt for an exact count.
+            </p>
         </div>
 
-        <div class="grid gap-2">
-            <Label for="repository-ai-module">Destination Folder</Label>
-            <select
-                id="repository-ai-module"
-                class="flex h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-[#071a2f] outline-none focus:border-[#002b57] focus:ring-3 focus:ring-[#002b57]/15"
-                value={aiSelectedModuleId ?? ''}
-                onchange={(event) => {
-                    aiSelectedModuleId =
-                        Number((event.currentTarget as HTMLSelectElement).value) ||
-                        null;
-                }}
-            >
-                <option value="">Select destination folder</option>
-                {#each aiGeneration.modules as module (module.id)}
-                    <option value={module.id}>{module.name}</option>
-                {/each}
-            </select>
-        </div>
+        <div class="grid gap-4 md:grid-cols-2">
+            <div class="grid gap-2">
+                <Label for="repository-ai-test-plan">Test Plan</Label>
+                <select
+                    id="repository-ai-test-plan"
+                    class="flex h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-[#071a2f] outline-none focus:border-[#002b57] focus:ring-3 focus:ring-[#002b57]/15"
+                    value={aiSelectedTestPlanId ?? ''}
+                    onchange={(event) => {
+                        aiSelectedTestPlanId =
+                            Number(
+                                (event.currentTarget as HTMLSelectElement).value,
+                            ) || null;
+                    }}
+                >
+                    <option value="">Select test plan</option>
+                    {#each aiGeneration.testPlans as testPlan (testPlan.id)}
+                        <option value={testPlan.id}>{testPlan.name}</option>
+                    {/each}
+                </select>
+            </div>
 
-        <div class="grid gap-2">
-            <Label for="repository-ai-count">Draft Count</Label>
-            <select
-                id="repository-ai-count"
-                value={String(aiDraftCount)}
-                class="flex h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-[#071a2f] outline-none focus:border-[#002b57] focus:ring-3 focus:ring-[#002b57]/15"
-                onchange={(event) => {
-                    aiDraftCount =
-                        Number((event.currentTarget as HTMLSelectElement).value) ||
-                        1;
-                }}
-            >
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-                <option value="6">6</option>
-                <option value="7">7</option>
-                <option value="8">8</option>
-                <option value="9">9</option>
-                <option value="10">10</option>
-            </select>
+            <div class="grid gap-2">
+                <Label for="repository-ai-module">Destination Folder</Label>
+                <select
+                    id="repository-ai-module"
+                    class="flex h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-[#071a2f] outline-none focus:border-[#002b57] focus:ring-3 focus:ring-[#002b57]/15"
+                    value={aiSelectedModuleId ?? ''}
+                    onchange={(event) => {
+                        aiSelectedModuleId =
+                            Number(
+                                (event.currentTarget as HTMLSelectElement).value,
+                            ) || null;
+                    }}
+                >
+                    <option value="">Select destination folder</option>
+                    {#each aiGeneration.modules as module (module.id)}
+                        <option value={module.id}>{module.name}</option>
+                    {/each}
+                </select>
+            </div>
         </div>
     </div>
 {/snippet}
@@ -1167,7 +1155,8 @@
                     onclick={confirmBulkCreate}
                 >
                     {#if aiSaving}<Spinner />{/if}
-                    Create Cases
+                    Create {aiDraftSet.cases.length}
+                    {aiDraftSet.cases.length === 1 ? 'Case' : 'Cases'}
                 </Button>
             </div>
         </div>

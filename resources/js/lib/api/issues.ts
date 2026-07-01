@@ -41,6 +41,14 @@ export type IssueRunOption = {
     };
 };
 
+export type IssueImage = {
+    id: number;
+    name: string;
+    mime_type: string;
+    size: number;
+    url: string;
+};
+
 export type IssueItem = {
     id: number;
     issue_key: string;
@@ -55,6 +63,7 @@ export type IssueItem = {
     assignee: string | null;
     environment: string | null;
     defect_type: string | null;
+    image: IssueImage | null;
     project: {
         id: number;
         name: string | null;
@@ -191,6 +200,29 @@ const serializePayload = (values: IssueFormValues) => ({
     test_run_id: values.test_run_id,
 });
 
+const toFormData = (
+    values: IssueFormValues,
+    image: File | null,
+    removeImage = false,
+): FormData => {
+    const formData = new FormData();
+    const payload = serializePayload(values);
+
+    Object.entries(payload).forEach(([key, value]) => {
+        formData.append(key, value === null ? '' : String(value));
+    });
+
+    if (image) {
+        formData.append('image', image);
+    }
+
+    if (removeImage) {
+        formData.append('remove_image', '1');
+    }
+
+    return formData;
+};
+
 export async function fetchIssues(
     filters: Partial<IssueFilters>,
 ): Promise<IssueListResponse> {
@@ -201,7 +233,17 @@ export async function fetchIssues(
 
 export async function createIssue(
     values: IssueFormValues,
+    image: File | null = null,
 ): Promise<{ data: IssueItem }> {
+    if (image) {
+        return requestFormData<{ data: IssueItem }, IssueApiError>(
+            ISSUES_ENDPOINT,
+            toFormData(values, image),
+            IssueApiError,
+            'Unable to create the issue.',
+        );
+    }
+
     return request<{ data: IssueItem }>(ISSUES_ENDPOINT, {
         body: JSON.stringify(serializePayload(values)),
         method: 'POST',
@@ -211,7 +253,27 @@ export async function createIssue(
 export async function updateIssue(
     issueId: number,
     values: IssueFormValues,
+    imageOptions: {
+        image?: File | null;
+        removeImage?: boolean;
+    } = {},
 ): Promise<{ data: IssueItem }> {
+    if (imageOptions.image || imageOptions.removeImage) {
+        const formData = toFormData(
+            values,
+            imageOptions.image ?? null,
+            imageOptions.removeImage ?? false,
+        );
+        formData.append('_method', 'PUT');
+
+        return requestFormData<{ data: IssueItem }, IssueApiError>(
+            `${ISSUES_ENDPOINT}/${issueId}`,
+            formData,
+            IssueApiError,
+            'Unable to update the issue.',
+        );
+    }
+
     return request<{ data: IssueItem }>(`${ISSUES_ENDPOINT}/${issueId}`, {
         body: JSON.stringify(serializePayload(values)),
         method: 'PUT',
@@ -225,4 +287,4 @@ export async function deleteIssue(
         method: 'DELETE',
     });
 }
-import { buildQueryString, requestJson } from './client';
+import { buildQueryString, requestFormData, requestJson } from './client';

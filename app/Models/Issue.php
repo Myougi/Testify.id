@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
@@ -207,5 +208,13 @@ class Issue extends Model
     public function testRun(): BelongsTo
     {
         return $this->belongsTo(TestRun::class);
+    }
+
+    /**
+     * @return HasOne<IssueAttachment, $this>
+     */
+    public function attachment(): HasOne
+    {
+        return $this->hasOne(IssueAttachment::class);
     }
 }

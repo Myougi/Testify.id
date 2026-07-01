@@ -1,5 +1,6 @@
 <?php
 
+use App\Ai\Agents\SeniorQualityAssuranceAgent;
 use App\Models\User;
 use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Fortify\Features;
@@ -93,6 +94,37 @@ test('expired browser sessions are redirected to login instead of showing page e
     $response
         ->assertRedirect(route('login', absolute: false))
         ->assertSessionHas('status', 'Your session expired. Please log in again.');
+});
+
+test('expired session api requests return the csrf recovery contract', function () {
+    $this->app->instance('env', 'local');
+
+    $user = User::factory()->create();
+
+    SeniorQualityAssuranceAgent::fake()->preventStrayPrompts();
+
+    $this
+        ->actingAs($user)
+        ->postJson(route('api.ai.generate'), [
+            'artifact_type' => 'test_plan',
+            'prompt' => 'Generate a release readiness plan.',
+        ])
+        ->assertStatus(419)
+        ->assertExactJson([
+            'message' => 'Your session expired. Please log in again.',
+            'code' => 'session_expired',
+            'login_url' => route('login', ['expired' => 1], absolute: false),
+        ]);
+
+    SeniorQualityAssuranceAgent::assertNeverPrompted();
+});
+
+test('expired login links explain why authentication is required', function () {
+    $this->get(route('login', ['expired' => 1]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('auth/Login')
+            ->where('status', 'Your session expired. Please log in again.'));
 });
 
 test('users are rate limited', function () {

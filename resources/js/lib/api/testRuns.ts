@@ -1,5 +1,6 @@
 export type TestRunEnvironment =
     | 'Development'
+    | 'SIT'
     | 'Staging'
     | 'UAT'
     | 'Production';

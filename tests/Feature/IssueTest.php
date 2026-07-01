@@ -1,11 +1,14 @@
 <?php
 
 use App\Models\Issue;
+use App\Models\IssueAttachment;
 use App\Models\Project;
 use App\Models\TestPlan;
 use App\Models\TestRun;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 
 test('guests are redirected from the issues page', function (): void {
     $response = $this->get(route('issues.index'));
@@ -378,4 +381,170 @@ test('users can delete an issue', function (): void {
     $this->assertSoftDeleted('issues', [
         'id' => $issue->id,
     ]);
+});
+
+test('users can create an issue with a private image attachment', function (): void {
+    Storage::fake('local');
+
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user)->create();
+    $image = UploadedFile::fake()->image('checkout-error.png', 1200, 800)->size(2048);
+
+    $response = $this
+        ->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $project->project_id])
+        ->post(route('api.issues.store'), [
+            'title' => 'Checkout error evidence',
+            'description' => 'Submit checkout with an expired payment token.',
+            'priority' => Issue::PRIORITY_HIGH,
+            'severity' => Issue::SEVERITY_HIGH,
+            'status' => Issue::STATUS_OPEN,
+            'reporter' => 'Ari',
+            'image' => $image,
+        ], ['Accept' => 'application/json']);
+
+    $response->assertCreated()
+        ->assertJsonPath('data.image.name', 'checkout-error.png')
+        ->assertJsonPath('data.image.mime_type', 'image/png');
+
+    $attachment = IssueAttachment::query()->sole();
+
+    Storage::disk('local')->assertExists($attachment->path);
+    expect($attachment->issue->project_id)->toBe($project->project_id);
+});
+
+test('issue image validation rejects unsupported and oversized files', function (): void {
+    Storage::fake('local');
+
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user)->create();
+    $payload = [
+        'title' => 'Invalid image evidence',
+        'description' => 'Attempt to attach invalid evidence.',
+        'priority' => Issue::PRIORITY_MEDIUM,
+        'severity' => Issue::SEVERITY_MEDIUM,
+        'status' => Issue::STATUS_OPEN,
+        'reporter' => 'Ari',
+    ];
+
+    $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $project->project_id])
+        ->post(route('api.issues.store'), [
+            ...$payload,
+            'image' => UploadedFile::fake()->create('notes.pdf', 100, 'application/pdf'),
+        ], ['Accept' => 'application/json'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('image');
+
+    $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $project->project_id])
+        ->post(route('api.issues.store'), [
+            ...$payload,
+            'image' => UploadedFile::fake()->image('too-large.png')->size(5121),
+        ], ['Accept' => 'application/json'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('image');
+});
+
+test('issue detail exposes image metadata and only the owner can view the file', function (): void {
+    Storage::fake('local');
+
+    $owner = User::factory()->create();
+    $otherUser = User::factory()->create();
+    $project = Project::factory()->for($owner)->create();
+    $issue = Issue::factory()->for($project, 'project')->create();
+    Storage::disk('local')->put('issues/evidence.png', 'private image');
+    $attachment = IssueAttachment::factory()->for($issue)->create([
+        'path' => 'issues/evidence.png',
+        'original_name' => 'evidence.png',
+    ]);
+
+    $this->actingAs($owner)
+        ->get(route('issues.show', $issue))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('initialIssue.image.id', $attachment->id)
+            ->where('initialIssue.image.name', 'evidence.png')
+            ->where('initialIssue.image.url', route('issues.image', $issue)));
+
+    $this->actingAs($owner)
+        ->get(route('issues.image', $issue))
+        ->assertOk()
+        ->assertHeader('content-disposition', 'inline; filename=evidence.png');
+
+    $this->actingAs($otherUser)
+        ->get(route('issues.image', $issue))
+        ->assertForbidden();
+});
+
+test('users can replace and remove an issue image', function (): void {
+    Storage::fake('local');
+
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user)->create();
+    $issue = Issue::factory()->for($project, 'project')->create();
+    Storage::disk('local')->put('issues/old.png', 'old image');
+    IssueAttachment::factory()->for($issue)->create([
+        'path' => 'issues/old.png',
+        'original_name' => 'old.png',
+    ]);
+    $payload = [
+        'title' => $issue->title,
+        'description' => $issue->description,
+        'expected_result' => $issue->expected_result,
+        'actual_result' => $issue->actual_result,
+        'priority' => $issue->priority,
+        'severity' => $issue->severity,
+        'status' => $issue->status,
+        'reporter' => $issue->reporter,
+        'assignee' => $issue->assignee,
+        'environment' => $issue->environment,
+        'defect_type' => $issue->defect_type,
+        'test_plan_id' => null,
+        'test_run_id' => null,
+    ];
+
+    $this->actingAs($user)
+        ->post(route('api.issues.update', $issue), [
+            ...$payload,
+            '_method' => 'PUT',
+            'image' => UploadedFile::fake()->image('replacement.webp'),
+        ], ['Accept' => 'application/json'])
+        ->assertOk()
+        ->assertJsonPath('data.image.name', 'replacement.webp');
+
+    $replacement = $issue->attachment()->sole();
+    Storage::disk('local')->assertMissing('issues/old.png');
+    Storage::disk('local')->assertExists($replacement->path);
+
+    $this->actingAs($user)
+        ->post(route('api.issues.update', $issue), [
+            ...$payload,
+            '_method' => 'PUT',
+            'remove_image' => '1',
+        ], ['Accept' => 'application/json'])
+        ->assertOk()
+        ->assertJsonPath('data.image', null);
+
+    Storage::disk('local')->assertMissing($replacement->path);
+    expect($issue->attachment()->exists())->toBeFalse();
+});
+
+test('deleting an issue removes its private image', function (): void {
+    Storage::fake('local');
+
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user)->create();
+    $issue = Issue::factory()->for($project, 'project')->create();
+    Storage::disk('local')->put('issues/delete-me.png', 'image');
+    IssueAttachment::factory()->for($issue)->create([
+        'path' => 'issues/delete-me.png',
+    ]);
+
+    $this->actingAs($user)
+        ->deleteJson(route('api.issues.destroy', $issue))
+        ->assertOk();
+
+    Storage::disk('local')->assertMissing('issues/delete-me.png');
+    $this->assertDatabaseMissing('issue_attachments', ['issue_id' => $issue->id]);
 });

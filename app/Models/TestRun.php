@@ -41,6 +41,8 @@ class TestRun extends Model
 {
     public const ENVIRONMENT_DEVELOPMENT = 'Development';
 
+    public const ENVIRONMENT_SIT = 'SIT';
+
     public const ENVIRONMENT_STAGING = 'Staging';
 
     public const ENVIRONMENT_UAT = 'UAT';
@@ -94,6 +96,7 @@ class TestRun extends Model
     {
         return [
             self::ENVIRONMENT_DEVELOPMENT,
+            self::ENVIRONMENT_SIT,
             self::ENVIRONMENT_STAGING,
             self::ENVIRONMENT_UAT,
             self::ENVIRONMENT_PRODUCTION,

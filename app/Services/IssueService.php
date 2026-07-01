@@ -7,7 +7,13 @@ use App\Models\Project;
 use App\Models\TestRun;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use RuntimeException;
+use Throwable;
 
 class IssueService
 {
@@ -101,10 +107,30 @@ class IssueService
      */
     public function store(Project $project, array $data): Issue
     {
-        $issue = Issue::query()->create([
-            ...$this->normalizeData($data),
-            'project_id' => $project->project_id,
-        ]);
+        $storedPath = null;
+
+        try {
+            $issue = DB::transaction(function () use ($project, $data, &$storedPath): Issue {
+                $issue = Issue::query()->create([
+                    ...$this->normalizeData($data),
+                    'project_id' => $project->project_id,
+                ]);
+
+                $image = $data['image'] ?? null;
+
+                if ($image instanceof UploadedFile) {
+                    $storedPath = $this->storeImage($issue, $image);
+                }
+
+                return $issue;
+            });
+        } catch (Throwable $exception) {
+            if ($storedPath) {
+                Storage::disk('local')->delete($storedPath);
+            }
+
+            throw $exception;
+        }
 
         return $this->getDetail($issue);
     }
@@ -114,9 +140,60 @@ class IssueService
      */
     public function update(Issue $issue, array $data): Issue
     {
-        $issue->update($this->normalizeData($data, $issue));
+        $storedPath = null;
+        $fileToDelete = null;
+
+        try {
+            DB::transaction(function () use ($issue, $data, &$storedPath, &$fileToDelete): void {
+                $issue->update($this->normalizeData($data, $issue));
+
+                $currentAttachment = $issue->attachment()->first();
+                $image = $data['image'] ?? null;
+
+                if ($image instanceof UploadedFile) {
+                    if ($currentAttachment) {
+                        $fileToDelete = [
+                            'disk' => $currentAttachment->disk,
+                            'path' => $currentAttachment->path,
+                        ];
+                    }
+
+                    $storedPath = $this->storeImage($issue, $image, true);
+                } elseif ((bool) ($data['remove_image'] ?? false) && $currentAttachment) {
+                    $fileToDelete = [
+                        'disk' => $currentAttachment->disk,
+                        'path' => $currentAttachment->path,
+                    ];
+                    $currentAttachment->delete();
+                }
+            });
+        } catch (Throwable $exception) {
+            if ($storedPath) {
+                Storage::disk('local')->delete($storedPath);
+            }
+
+            throw $exception;
+        }
+
+        if ($fileToDelete && $fileToDelete['path'] !== $storedPath) {
+            Storage::disk($fileToDelete['disk'])->delete($fileToDelete['path']);
+        }
 
         return $this->getDetail($issue->fresh());
+    }
+
+    public function delete(Issue $issue): void
+    {
+        $attachment = $issue->attachment()->first();
+
+        DB::transaction(function () use ($issue, $attachment): void {
+            $attachment?->delete();
+            $issue->delete();
+        });
+
+        if ($attachment) {
+            Storage::disk($attachment->disk)->delete($attachment->path);
+        }
     }
 
     public function getDetail(Issue $issue): Issue
@@ -126,6 +203,7 @@ class IssueService
             'testPlan:id,project_id,name',
             'testRun:id,test_plan_id,name,status',
             'testRun.testPlan:id,project_id,name',
+            'attachment',
         ]);
     }
 
@@ -182,6 +260,7 @@ class IssueService
                 'testPlan:id,project_id,name',
                 'testRun:id,test_plan_id,name,status',
                 'testRun.testPlan:id,project_id,name',
+                'attachment',
             ])
             ->where('project_id', $project->project_id);
     }
@@ -234,5 +313,36 @@ class IssueService
         $normalized = trim((string) ($value ?? ''));
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    private function storeImage(Issue $issue, UploadedFile $image, bool $replace = false): string
+    {
+        if (! $image->isValid()) {
+            throw ValidationException::withMessages([
+                'image' => 'The image upload could not be read. Please select the file again.',
+            ]);
+        }
+
+        $path = $image->store("issues/{$issue->project_id}/{$issue->id}", 'local');
+
+        if (! $path) {
+            throw new RuntimeException('Unable to store the issue image.');
+        }
+
+        $attributes = [
+            'disk' => 'local',
+            'path' => $path,
+            'original_name' => $image->getClientOriginalName(),
+            'mime_type' => (string) $image->getMimeType(),
+            'size' => $image->getSize(),
+        ];
+
+        if ($replace) {
+            $issue->attachment()->updateOrCreate([], $attributes);
+        } else {
+            $issue->attachment()->create($attributes);
+        }
+
+        return $path;
     }
 }
