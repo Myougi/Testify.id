@@ -6,7 +6,7 @@ use App\Support\DataMigration\DurableTableMap;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
@@ -58,7 +58,7 @@ class ImportDurableDataCommand extends Command
         return self::SUCCESS;
     }
 
-    private function truncateDurableTables(ConnectionInterface $connection): void
+    private function truncateDurableTables(Connection $connection): void
     {
         foreach (array_reverse(DurableTableMap::tableNames()) as $table) {
             $connection->table($table)->delete();
@@ -66,10 +66,10 @@ class ImportDurableDataCommand extends Command
     }
 
     /**
-     * @param  array{table: string, primary_key: string, sequence_column: string|null}  $definition
+     * @param  array{table: non-empty-string, primary_key: non-empty-string, sequence_column: non-empty-string|null}  $definition
      */
     private function importTable(
-        ConnectionInterface $connection,
+        Connection $connection,
         array $definition,
         string $filePath,
         ?string $attachmentDisk,
@@ -83,7 +83,17 @@ class ImportDurableDataCommand extends Command
         try {
             $header = fgetcsv($handle);
 
-            if (! is_array($header) || $header === []) {
+            if (! is_array($header)) {
+                return 0;
+            }
+
+            /** @var list<non-empty-string> $columns */
+            $columns = array_values(array_filter(
+                $header,
+                static fn (mixed $column): bool => is_string($column) && $column !== '',
+            ));
+
+            if ($columns === []) {
                 return 0;
             }
 
@@ -93,7 +103,7 @@ class ImportDurableDataCommand extends Command
             while (($csvRow = fgetcsv($handle)) !== false) {
                 $record = [];
 
-                foreach ($header as $offset => $column) {
+                foreach ($columns as $offset => $column) {
                     $record[$column] = json_decode($csvRow[$offset] ?? 'null', true, 512, JSON_THROW_ON_ERROR);
                 }
 
@@ -123,14 +133,18 @@ class ImportDurableDataCommand extends Command
     /**
      * @param  list<array<string, mixed>>  $rows
      */
-    private function upsertChunk(ConnectionInterface $connection, string $table, string $primaryKey, array $rows): void
+    private function upsertChunk(Connection $connection, string $table, string $primaryKey, array $rows): void
     {
+        if ($rows === []) {
+            return;
+        }
+
         $updateColumns = array_values(array_diff(array_keys($rows[0]), [$primaryKey]));
 
         $connection->table($table)->upsert($rows, $primaryKey, $updateColumns);
     }
 
-    private function resetSequences(ConnectionInterface $connection): void
+    private function resetSequences(Connection $connection): void
     {
         if ($connection->getDriverName() !== 'pgsql') {
             return;
@@ -149,7 +163,7 @@ class ImportDurableDataCommand extends Command
             );
 
             /** @var string|null $sequenceName */
-            $sequenceName = $sequence?->sequence_name ?? null;
+            $sequenceName = $sequence?->sequence_name;
 
             if ($sequenceName === null) {
                 continue;

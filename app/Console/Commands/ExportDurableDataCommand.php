@@ -6,7 +6,7 @@ use App\Support\DataMigration\DurableTableMap;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
@@ -51,7 +51,7 @@ class ExportDurableDataCommand extends Command
 
         File::put(
             $directory.DIRECTORY_SEPARATOR.'manifest.json',
-            json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+            (string) json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
         );
 
         $this->components->info("Durable data export completed at {$directory}.");
@@ -60,10 +60,10 @@ class ExportDurableDataCommand extends Command
     }
 
     /**
-     * @param  list<string>  $columns
+     * @param  list<non-empty-string>  $columns
      */
     private function exportTable(
-        ConnectionInterface $connection,
+        Connection $connection,
         string $table,
         string $primaryKey,
         array $columns,

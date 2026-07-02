@@ -5,7 +5,7 @@ namespace App\Support\DataMigration;
 final class DurableTableMap
 {
     /**
-     * @return list<array{table: string, primary_key: string, sequence_column: string|null}>
+     * @return list<array{table: non-empty-string, primary_key: non-empty-string, sequence_column: non-empty-string|null}>
      */
     public static function definitions(): array
     {
@@ -30,7 +30,7 @@ final class DurableTableMap
     }
 
     /**
-     * @return list<string>
+     * @return list<non-empty-string>
      */
     public static function tableNames(): array
     {
@@ -38,7 +38,7 @@ final class DurableTableMap
     }
 
     /**
-     * @return array{table: string, primary_key: string, sequence_column: string|null}
+     * @return array{table: non-empty-string, primary_key: non-empty-string, sequence_column: non-empty-string|null}
      */
     public static function definition(string $table): array
     {
