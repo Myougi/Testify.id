@@ -132,6 +132,7 @@ class ImportDurableDataCommand extends Command
 
     /**
      * @param  list<array<string, mixed>>  $rows
+     * @param  non-empty-string  $primaryKey
      */
     private function upsertChunk(Connection $connection, string $table, string $primaryKey, array $rows): void
     {

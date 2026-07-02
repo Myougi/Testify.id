@@ -36,7 +36,10 @@ class ExportDurableDataCommand extends Command
 
         foreach (DurableTableMap::definitions() as $index => $definition) {
             $table = $definition['table'];
-            $columns = Schema::connection($connectionName)->getColumnListing($table);
+            $columns = $this->validatedColumnNames(
+                Schema::connection($connectionName)->getColumnListing($table),
+                $table,
+            );
             $filePath = $directory.DIRECTORY_SEPARATOR.sprintf('%02d_%s.csv', $index + 1, $table);
             $count = $this->exportTable($connection, $table, $definition['primary_key'], $columns, $filePath);
 
@@ -100,6 +103,22 @@ class ExportDurableDataCommand extends Command
         } finally {
             fclose($handle);
         }
+    }
+
+    /**
+     * @param  list<string>  $columns
+     * @return list<non-empty-string>
+     */
+    private function validatedColumnNames(array $columns, string $table): array
+    {
+        foreach ($columns as $column) {
+            if ($column === '') {
+                throw new \RuntimeException("Schema returned an empty column name for table [{$table}].");
+            }
+        }
+
+        /** @var list<non-empty-string> $columns */
+        return $columns;
     }
 
     private function resolveDirectory(string $path): string

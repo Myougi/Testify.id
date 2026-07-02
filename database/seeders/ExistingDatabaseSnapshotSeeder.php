@@ -28,6 +28,7 @@ class ExistingDatabaseSnapshotSeeder extends Seeder
 
     /**
      * @param  list<array<string, int|string|null>>  $records
+     * @param  non-empty-string  $uniqueBy
      */
     private function upsert(string $table, array $records, string $uniqueBy): void
     {
