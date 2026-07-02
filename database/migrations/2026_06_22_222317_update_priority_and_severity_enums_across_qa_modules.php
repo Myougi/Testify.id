@@ -13,17 +13,15 @@ return new class extends Migration
     public function up(): void
     {
         if (! Schema::hasColumn('test_plans', 'priority')) {
-            Schema::table('test_plans', function (Blueprint $table): void {
-                $table->enum('priority', ['Low', 'Medium', 'High', 'Urgent'])
-                    ->default('Medium')
-                    ->after('status');
-            });
+            $this->addTestPlanPriorityColumn();
         }
 
         if (! $this->usesMysql()) {
             return;
         }
 
+        // Legacy MySQL enum transitions are only needed for environments
+        // that still contain the old values from earlier revisions.
         DB::statement("ALTER TABLE test_cases MODIFY priority ENUM('P1', 'P2', 'P3', 'Low', 'Medium', 'High', 'Urgent') NOT NULL");
         DB::table('test_cases')->where('priority', 'P1')->update(['priority' => 'High']);
         DB::table('test_cases')->where('priority', 'P2')->update(['priority' => 'Medium']);
@@ -45,6 +43,8 @@ return new class extends Migration
     public function down(): void
     {
         if ($this->usesMysql()) {
+            // Re-apply the legacy MySQL enum values only for rollback on
+            // databases that originally ran the historic transition.
             DB::table('test_cases')->where('priority', 'Low')->update(['priority' => 'P3']);
             DB::table('test_cases')->where('priority', 'Medium')->update(['priority' => 'P2']);
             DB::table('test_cases')->whereIn('priority', ['High', 'Urgent'])->update(['priority' => 'P1']);
@@ -71,5 +71,18 @@ return new class extends Migration
     private function usesMysql(): bool
     {
         return in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true);
+    }
+
+    private function addTestPlanPriorityColumn(): void
+    {
+        Schema::table('test_plans', function (Blueprint $table): void {
+            $column = $table
+                ->enum('priority', ['Low', 'Medium', 'High', 'Urgent'])
+                ->default('Medium');
+
+            if ($this->usesMysql()) {
+                $column->after('status');
+            }
+        });
     }
 };

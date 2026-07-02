@@ -15,7 +15,9 @@ class IssueAttachmentController extends Controller
 
         $attachment = $issue->attachment;
 
-        abort_unless($attachment, 404);
+        if ($attachment === null) {
+            abort(404);
+        }
 
         return Storage::disk($attachment->disk)->response(
             $attachment->path,

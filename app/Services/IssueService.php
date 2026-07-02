@@ -108,6 +108,7 @@ class IssueService
     public function store(Project $project, array $data): Issue
     {
         $storedPath = null;
+        $attachmentDisk = $this->attachmentDisk();
 
         try {
             $issue = DB::transaction(function () use ($project, $data, &$storedPath): Issue {
@@ -126,7 +127,7 @@ class IssueService
             });
         } catch (Throwable $exception) {
             if ($storedPath) {
-                Storage::disk('local')->delete($storedPath);
+                Storage::disk($attachmentDisk)->delete($storedPath);
             }
 
             throw $exception;
@@ -142,6 +143,7 @@ class IssueService
     {
         $storedPath = null;
         $fileToDelete = null;
+        $attachmentDisk = $this->attachmentDisk();
 
         try {
             DB::transaction(function () use ($issue, $data, &$storedPath, &$fileToDelete): void {
@@ -169,7 +171,7 @@ class IssueService
             });
         } catch (Throwable $exception) {
             if ($storedPath) {
-                Storage::disk('local')->delete($storedPath);
+                Storage::disk($attachmentDisk)->delete($storedPath);
             }
 
             throw $exception;
@@ -323,14 +325,15 @@ class IssueService
             ]);
         }
 
-        $path = $image->store("issues/{$issue->project_id}/{$issue->id}", 'local');
+        $disk = $this->attachmentDisk();
+        $path = $image->store("issues/{$issue->project_id}/{$issue->id}", $disk);
 
         if (! $path) {
             throw new RuntimeException('Unable to store the issue image.');
         }
 
         $attributes = [
-            'disk' => 'local',
+            'disk' => $disk,
             'path' => $path,
             'original_name' => $image->getClientOriginalName(),
             'mime_type' => (string) $image->getMimeType(),
@@ -344,5 +347,10 @@ class IssueService
         }
 
         return $path;
+    }
+
+    private function attachmentDisk(): string
+    {
+        return (string) config('filesystems.issue_attachments_disk', 'local');
     }
 }

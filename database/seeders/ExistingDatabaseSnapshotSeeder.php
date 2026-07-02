@@ -13,33 +13,34 @@ class ExistingDatabaseSnapshotSeeder extends Seeder
     public function run(): void
     {
         DB::transaction(function (): void {
-            $this->upsert('projects', $this->projects(), ['project_id']);
-            $this->upsert('test_repository_modules', $this->repositoryModules(), ['id']);
-            $this->upsert('test_plans', $this->testPlans(), ['id']);
-            $this->upsert('test_cases', $this->testCases(), ['id']);
-            $this->upsert('test_case_steps', $this->testCaseSteps(), ['id']);
-            $this->upsert('test_case_test_plan', $this->testCaseTestPlans(), ['id']);
-            $this->upsert('test_runs', $this->testRuns(), ['id']);
-            $this->upsert('test_case_test_run', $this->testCaseTestRuns(), ['id']);
-            $this->upsert('issues', $this->issues(), ['id']);
-            $this->upsert('issue_attachments', $this->issueAttachments(), ['id']);
+            $this->upsert('projects', $this->projects(), 'project_id');
+            $this->upsert('test_repository_modules', $this->repositoryModules(), 'id');
+            $this->upsert('test_plans', $this->testPlans(), 'id');
+            $this->upsert('test_cases', $this->testCases(), 'id');
+            $this->upsert('test_case_steps', $this->testCaseSteps(), 'id');
+            $this->upsert('test_case_test_plan', $this->testCaseTestPlans(), 'id');
+            $this->upsert('test_runs', $this->testRuns(), 'id');
+            $this->upsert('test_case_test_run', $this->testCaseTestRuns(), 'id');
+            $this->upsert('issues', $this->issues(), 'id');
+            $this->upsert('issue_attachments', $this->issueAttachments(), 'id');
         });
     }
 
     /**
      * @param  list<array<string, int|string|null>>  $records
-     * @param  list<string>  $uniqueBy
      */
-    private function upsert(string $table, array $records, array $uniqueBy): void
+    private function upsert(string $table, array $records, string $uniqueBy): void
     {
         if ($records === []) {
             return;
         }
 
+        $updateColumns = array_values(array_diff(array_keys($records[0]), [$uniqueBy]));
+
         DB::table($table)->upsert(
             $records,
             $uniqueBy,
-            array_values(array_diff(array_keys($records[0]), $uniqueBy)),
+            $updateColumns,
         );
     }
 
