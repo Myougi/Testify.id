@@ -2,8 +2,11 @@
 
 use App\Models\Project;
 use App\Models\TestCase;
+use App\Models\TestPlan;
 use App\Models\TestRepositoryModule;
+use App\Models\TestRun;
 use App\Models\User;
+use App\Support\Api\V1\JsonApi;
 use Laravel\Sanctum\Sanctum;
 
 const TEST_CASE_JSON_API = 'application/vnd.api+json';
@@ -84,7 +87,7 @@ test('patch replaces steps only when supplied and enforces etags', function () {
     $testCase = TestCase::factory()->for($project, 'project')->for($module, 'module')->create();
     $testCase->steps()->create(['position' => 1, 'action' => 'Old', 'expected_result' => 'Old result']);
     Sanctum::actingAs($user, ['test-cases:write']);
-    $etag = \App\Support\Api\V1\JsonApi::etag($testCase);
+    $etag = JsonApi::etag($testCase);
 
     $this->json('PATCH', "/api/v1/test-cases/{$testCase->id}", [
         'data' => ['type' => 'test-cases', 'attributes' => ['title' => 'Renamed']],
@@ -114,4 +117,26 @@ test('patch replaces steps only when supplied and enforces etags', function () {
 
     expect($testCase->fresh()->steps()->count())->toBe(1);
     expect($testCase->fresh()->steps()->first()->action)->toBe('New action');
+});
+
+test('deleting a test case with related plans or runs returns a relationship conflict', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user)->create();
+    $module = TestRepositoryModule::factory()->for($project, 'project')->create();
+    $plan = TestPlan::factory()->for($project, 'project')->create();
+    $run = TestRun::factory()->for($plan)->create();
+    $testCase = TestCase::factory()->for($project, 'project')->for($module, 'module')->create();
+    $plan->testCases()->attach($testCase->id);
+    $run->testCases()->attach($testCase->id, ['execution_status' => TestRun::CASE_STATUS_NOT_RUN]);
+
+    Sanctum::actingAs($user, ['test-cases:write']);
+    $etag = JsonApi::etag($testCase);
+
+    $this->json('DELETE', "/api/v1/test-cases/{$testCase->id}", [], [
+        'Accept' => TEST_CASE_JSON_API,
+        'Content-Type' => TEST_CASE_JSON_API,
+        'If-Match' => $etag,
+    ])
+        ->assertConflict()
+        ->assertJsonPath('errors.0.code', 'resource_has_relationships');
 });

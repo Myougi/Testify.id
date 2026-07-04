@@ -165,7 +165,7 @@ class TestCase extends Model
     /**
      * @return BelongsToMany<TestPlan, $this>
      */
-    public function test_plans(): BelongsToMany
+    public function testPlans(): BelongsToMany
     {
         return $this->belongsToMany(TestPlan::class)->withTimestamps();
     }
@@ -173,9 +173,29 @@ class TestCase extends Model
     /**
      * @return BelongsToMany<TestRun, $this>
      */
-    public function test_runs(): BelongsToMany
+    public function testRuns(): BelongsToMany
     {
         return $this->belongsToMany(TestRun::class)->withTimestamps();
+    }
+
+    /**
+     * Backward-compatible alias for earlier snake_case relation usage.
+     *
+     * @return BelongsToMany<TestPlan, $this>
+     */
+    public function test_plans(): BelongsToMany
+    {
+        return $this->testPlans();
+    }
+
+    /**
+     * Backward-compatible alias for earlier snake_case relation usage.
+     *
+     * @return BelongsToMany<TestRun, $this>
+     */
+    public function test_runs(): BelongsToMany
+    {
+        return $this->testRuns();
     }
 
     /** @return HasOne<TestCaseAutomation, $this> */
