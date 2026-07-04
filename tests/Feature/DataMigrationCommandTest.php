@@ -4,6 +4,7 @@ use App\Models\Issue;
 use App\Models\IssueAttachment;
 use App\Models\Project;
 use App\Models\User;
+use App\Support\DataMigration\DurableTableMap;
 use Illuminate\Support\Facades\File;
 
 test('durable data can be exported and re-imported with attachment disk remapping', function (): void {
@@ -31,10 +32,15 @@ test('durable data can be exported and re-imported with attachment disk remappin
     $this->artisan('qa:export-durable-data', ['--path' => $exportPath])
         ->assertSuccessful();
 
-    expect(File::exists(base_path($exportPath.'/01_users.csv')))->toBeTrue();
-    expect(File::exists(base_path($exportPath.'/02_projects.csv')))->toBeTrue();
-    expect(File::exists(base_path($exportPath.'/10_issues.csv')))->toBeTrue();
-    expect(File::exists(base_path($exportPath.'/11_issue_attachments.csv')))->toBeTrue();
+    $exportedFiles = collect(DurableTableMap::definitions())
+        ->mapWithKeys(fn (array $definition, int $index): array => [
+            $definition['table'] => sprintf('%02d_%s.csv', $index + 1, $definition['table']),
+        ]);
+
+    expect(File::exists(base_path($exportPath.'/'.$exportedFiles['users'])))->toBeTrue();
+    expect(File::exists(base_path($exportPath.'/'.$exportedFiles['projects'])))->toBeTrue();
+    expect(File::exists(base_path($exportPath.'/'.$exportedFiles['issues'])))->toBeTrue();
+    expect(File::exists(base_path($exportPath.'/'.$exportedFiles['issue_attachments'])))->toBeTrue();
     expect(File::exists(base_path($exportPath.'/manifest.json')))->toBeTrue();
 
     $manifest = json_decode(File::get(base_path($exportPath.'/manifest.json')), true, 512, JSON_THROW_ON_ERROR);
