@@ -6,6 +6,7 @@ use App\Models\ApiAuditLog;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class AuditService
 {
@@ -23,11 +24,17 @@ class AuditService
         ?User $actor = null,
     ): void {
         $user = $actor ?? $request->user();
+        $requestId = $request->attributes->get('request_id');
+
+        if (! is_string($requestId) || ! Str::isUuid($requestId)) {
+            $requestId = (string) Str::uuid();
+            $request->attributes->set('request_id', $requestId);
+        }
 
         ApiAuditLog::query()->create([
             'user_id' => $user?->id,
             'personal_access_token_id' => $user?->currentAccessToken()?->getKey(),
-            'request_id' => (string) $request->attributes->get('request_id'),
+            'request_id' => $requestId,
             'action' => $action,
             'resource_type' => $resourceType,
             'resource_id' => $resource instanceof Model ? (string) $resource->getKey() : $resource,

@@ -17,7 +17,7 @@ use App\Http\Controllers\Api\V1\TokenController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('runner/v1')
-    ->middleware(['automation.runner', 'throttle:automation-runner'])
+    ->middleware(['api.request-id', 'automation.runner', 'throttle:automation-runner'])
     ->group(function (): void {
         Route::get('automation-runs/{automationRun}', [RunnerAutomationRunController::class, 'show']);
         Route::post('automation-runs/{automationRun}/start', [RunnerAutomationRunController::class, 'start']);

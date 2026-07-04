@@ -36,6 +36,23 @@ test('runner callbacks require valid signatures and idempotency keys', function 
     expect($run->fresh()->status)->toBe(AutomationRun::STATUS_RUNNING);
 });
 
+test('runner show reuses the signed request identifier for audit logging', function (): void {
+    [$run] = runnerCallbackFixture();
+    $path = "/api/runner/v1/automation-runs/{$run->id}";
+    $requestId = (string) Str::uuid();
+
+    signedRunnerGet($this, $path, $requestId)
+        ->assertOk()
+        ->assertHeader('X-Request-ID', $requestId)
+        ->assertJsonPath('data.id', $run->id);
+
+    $this->assertDatabaseHas('api_audit_logs', [
+        'action' => 'automation_run.claimed',
+        'resource_id' => $run->id,
+        'request_id' => $requestId,
+    ]);
+});
+
 test('runner rejects expired signatures and replayed request identifiers', function (): void {
     [$run] = runnerCallbackFixture();
     $path = "/api/runner/v1/automation-runs/{$run->id}/start";
@@ -153,4 +170,30 @@ function signedRunnerPost(
     }
 
     return $testCase->call('POST', $path, [], [], [], $headers, $body);
+}
+
+/**
+ * @return TestResponse<Response>
+ */
+function signedRunnerGet(
+    FeatureTestCase $testCase,
+    string $path,
+    ?string $requestId = null,
+    ?int $timestamp = null,
+): TestResponse {
+    $timestamp ??= now()->getTimestamp();
+    $requestId ??= (string) Str::uuid();
+    $canonical = implode("\n", [
+        (string) $timestamp,
+        'GET',
+        $path,
+        hash('sha256', ''),
+    ]);
+
+    return $testCase->call('GET', $path, [], [], [], [
+        'HTTP_ACCEPT' => 'application/json',
+        'HTTP_X_TESTIFY_TIMESTAMP' => (string) $timestamp,
+        'HTTP_X_TESTIFY_REQUEST_ID' => $requestId,
+        'HTTP_X_TESTIFY_SIGNATURE' => hash_hmac('sha256', $canonical, 'runner-secret'),
+    ]);
 }

@@ -16,7 +16,7 @@ class AssignRequestId
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $requestId = $request->header('X-Request-ID');
+        $requestId = $request->header('X-Testify-Request-Id', $request->header('X-Request-ID'));
 
         if (! is_string($requestId) || ! Str::isUuid($requestId)) {
             $requestId = (string) Str::uuid();
