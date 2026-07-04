@@ -10,12 +10,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class TestRunPageController extends Controller
 {
-    public function __construct(public TestRunService $testRunService)
-    {
-    }
+    public function __construct(public TestRunService $testRunService) {}
 
     /**
      * Display a listing of the resource.
@@ -25,17 +24,18 @@ class TestRunPageController extends Controller
         Gate::authorize('viewAny', TestRun::class);
 
         $filters = $this->validatedFilters($request);
+        $activeProjectId = $this->activeProjectId($request);
 
         $payload = (new TestRunCollection(
-            $this->testRunService->paginateForUser($request->user(), $filters),
+            $this->testRunService->paginateForUser($request->user(), $filters, $activeProjectId),
         ))->additional([
-            'stats' => $this->testRunService->getStats($request->user()),
+            'stats' => $this->testRunService->getStats($request->user(), $activeProjectId),
             'filters' => [
                 ...$filters,
                 'page' => $request->integer('page', 1),
             ],
             'options' => [
-                'testPlans' => $this->testRunService->getTestPlanOptions($request->user()),
+                'testPlans' => $this->testRunService->getTestPlanOptions($request->user(), $activeProjectId),
                 'environments' => TestRun::environments(),
                 'priorities' => TestRun::priorities(),
                 'statuses' => TestRun::statuses(),
@@ -48,9 +48,10 @@ class TestRunPageController extends Controller
         ]);
     }
 
-    public function show(TestRun $testRun): Response
+    public function show(Request $request, TestRun $testRun): Response
     {
         Gate::authorize('view', $testRun);
+        $this->abortWhenOutsideActiveProject($request, $testRun->testPlan->project_id);
 
         $payload = (new TestRunResource(
             $this->testRunService->getDetail($testRun),
@@ -84,5 +85,30 @@ class TestRunPageController extends Controller
             'test_plan_id' => isset($validated['test_plan_id']) ? (int) $validated['test_plan_id'] : null,
             'per_page' => (int) ($validated['per_page'] ?? 10),
         ];
+    }
+
+    private function activeProjectId(Request $request): ?int
+    {
+        $activeProjectId = $request->session()->get('qa_workspace_project_id');
+
+        if (! $request->user() || ! is_numeric($activeProjectId)) {
+            return null;
+        }
+
+        $projectExists = $request->user()
+            ->projects()
+            ->whereKey((int) $activeProjectId)
+            ->exists();
+
+        return $projectExists ? (int) $activeProjectId : null;
+    }
+
+    private function abortWhenOutsideActiveProject(Request $request, int $projectId): void
+    {
+        $activeProjectId = $this->activeProjectId($request);
+
+        if ($activeProjectId !== null && $activeProjectId !== $projectId) {
+            throw new NotFoundHttpException;
+        }
     }
 }

@@ -1,0 +1,17 @@
+{
+    "name": "testify-automation-runner",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "tsc --project tsconfig.json",
+        "start": "node dist/src/index.js",
+        "test": "npm run build && node --test dist/tests/**/*.test.js"
+    },
+    "dependencies": {
+        "playwright": "1.55.1"
+    },
+    "devDependencies": {
+        "@types/node": "22.18.6",
+        "typescript": "5.9.2"
+    }
+}

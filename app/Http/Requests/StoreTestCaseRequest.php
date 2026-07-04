@@ -55,6 +55,14 @@ class StoreTestCaseRequest extends FormRequest
     {
         return [
             function (Validator $validator): void {
+                $activeProjectId = $this->activeProjectId();
+
+                if ($activeProjectId !== null && $this->integer('project_id') !== $activeProjectId) {
+                    $validator->errors()->add('project_id', 'Test cases must use the active project.');
+
+                    return;
+                }
+
                 $module = TestRepositoryModule::query()->find($this->integer('module_id'));
 
                 if (! $module || $module->project_id !== $this->integer('project_id')) {
@@ -62,5 +70,12 @@ class StoreTestCaseRequest extends FormRequest
                 }
             },
         ];
+    }
+
+    private function activeProjectId(): ?int
+    {
+        $activeProjectId = $this->session()->get('qa_workspace_project_id');
+
+        return is_numeric($activeProjectId) ? (int) $activeProjectId : null;
     }
 }

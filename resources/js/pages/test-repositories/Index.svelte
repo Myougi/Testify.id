@@ -24,8 +24,8 @@
     import Sparkles from 'lucide-svelte/icons/sparkles';
     import Trash2 from 'lucide-svelte/icons/trash-2';
     import { toast } from 'svelte-sonner';
-    import AppHead from '@/components/AppHead.svelte';
     import AiDraftDialog from '@/components/ai/AiDraftDialog.svelte';
+    import AppHead from '@/components/AppHead.svelte';
     import InputError from '@/components/InputError.svelte';
     import { Button } from '@/components/ui/button';
     import {
@@ -41,8 +41,8 @@
         AiDraftApiError,
         generateAiDraft,
         summarizeAiSourceContext,
-        type TestCaseAiDraftSet,
     } from '@/lib/api/ai';
+    import type { TestCaseAiDraftSet } from '@/lib/api/ai';
     import {
         bulkCreateTestCases,
         createTestRepositoryModule,
@@ -363,7 +363,9 @@
         aiSelectedTestPlanId = null;
         aiSelectedModuleId =
             filters.module_id &&
-            aiGeneration.modules.some((module) => module.id === filters.module_id)
+            aiGeneration.modules.some(
+                (module) => module.id === filters.module_id,
+            )
                 ? filters.module_id
                 : null;
         aiProcessing = false;
@@ -405,8 +407,12 @@
     };
 
     const generateCaseDrafts = async (): Promise<void> => {
-        if (!aiGeneration.hasActiveProject || aiGeneration.activeProject === null) {
-            aiError = 'Select an active project before generating AI test cases.';
+        if (
+            !aiGeneration.hasActiveProject ||
+            aiGeneration.activeProject === null
+        ) {
+            aiError =
+                'Select an active project before generating AI test cases.';
 
             return;
         }
@@ -418,7 +424,8 @@
         }
 
         if (aiSelectedModuleId === null) {
-            aiError = 'Select a destination folder for the generated test cases.';
+            aiError =
+                'Select a destination folder for the generated test cases.';
 
             return;
         }
@@ -489,14 +496,19 @@
             });
 
             aiOpen = false;
-            toast.success(`${response.meta.created} AI-generated test cases created.`);
+            toast.success(
+                `${response.meta.created} AI-generated test cases created.`,
+            );
             filters.module_id = aiSelectedModuleId;
             await reload({
                 page: 1,
                 module_id: aiSelectedModuleId,
             });
         } catch (error) {
-            if (error instanceof TestRepositoryApiError && error.status === 422) {
+            if (
+                error instanceof TestRepositoryApiError &&
+                error.status === 422
+            ) {
                 aiError =
                     Object.values(error.errors)[0] ??
                     'Unable to create the generated test cases.';
@@ -593,7 +605,10 @@
                     >
                         <span>Projects</span>
                         <ChevronRight class="size-3" />
-                        <span>{aiGeneration.activeProject?.name ?? 'No Active Project'}</span>
+                        <span
+                            >{aiGeneration.activeProject?.name ??
+                                'No Active Project'}</span
+                        >
                         <ChevronRight class="size-3" />
                         <span class="text-[#002b57]">
                             {selectedModule?.name ?? 'All Repository'}
@@ -1042,7 +1057,8 @@
                     onchange={(event) => {
                         aiSelectedTestPlanId =
                             Number(
-                                (event.currentTarget as HTMLSelectElement).value,
+                                (event.currentTarget as HTMLSelectElement)
+                                    .value,
                             ) || null;
                     }}
                 >
@@ -1062,7 +1078,8 @@
                     onchange={(event) => {
                         aiSelectedModuleId =
                             Number(
-                                (event.currentTarget as HTMLSelectElement).value,
+                                (event.currentTarget as HTMLSelectElement)
+                                    .value,
                             ) || null;
                     }}
                 >
@@ -1083,9 +1100,13 @@
                 <article
                     class="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 text-sm text-[#071a2f]"
                 >
-                    <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div
+                        class="flex flex-wrap items-start justify-between gap-3"
+                    >
                         <div>
-                            <p class="text-base font-semibold">{caseDraft.title}</p>
+                            <p class="text-base font-semibold">
+                                {caseDraft.title}
+                            </p>
                             <p class="mt-1 text-xs text-slate-500">
                                 {caseDraft.priority} • {caseDraft.automation_status}
                                 • {caseDraft.test_behavior} • {caseDraft.test_type}
@@ -1102,25 +1123,32 @@
 
                     <div class="grid gap-3 md:grid-cols-2">
                         <div>
-                            <p class="text-xs font-semibold uppercase text-slate-500">
+                            <p
+                                class="text-xs font-semibold uppercase text-slate-500"
+                            >
                                 Preconditions
                             </p>
                             <p>{caseDraft.preconditions ?? 'Not provided'}</p>
                         </div>
                         <div>
-                            <p class="text-xs font-semibold uppercase text-slate-500">
+                            <p
+                                class="text-xs font-semibold uppercase text-slate-500"
+                            >
                                 Test Plan Context
                             </p>
                             <p>
                                 {aiGeneration.testPlans.find(
-                                    (testPlan) => testPlan.id === aiSelectedTestPlanId,
+                                    (testPlan) =>
+                                        testPlan.id === aiSelectedTestPlanId,
                                 )?.name ?? 'Not selected'}
                             </p>
                         </div>
                     </div>
 
                     <div class="grid gap-3">
-                        <p class="text-xs font-semibold uppercase text-slate-500">
+                        <p
+                            class="text-xs font-semibold uppercase text-slate-500"
+                        >
                             Steps
                         </p>
                         {#if caseDraft.steps.length === 0}

@@ -62,11 +62,18 @@ class UpdateTestRunRequest extends FormRequest
 
     private function validatePlanCaseMembership(Validator $validator): void
     {
+        $activeProjectId = $this->activeProjectId();
         $testPlan = TestPlan::query()
             ->whereKey($this->integer('test_plan_id'))
             ->first();
 
         if (! $testPlan) {
+            return;
+        }
+
+        if ($activeProjectId !== null && $testPlan->project_id !== $activeProjectId) {
+            $validator->errors()->add('test_plan_id', 'Test runs must use the active project.');
+
             return;
         }
 
@@ -97,5 +104,12 @@ class UpdateTestRunRequest extends FormRequest
             ->pluck('project_id')
             ->map(fn (mixed $projectId): int => (int) $projectId)
             ->all() ?? [];
+    }
+
+    private function activeProjectId(): ?int
+    {
+        $activeProjectId = $this->session()->get('qa_workspace_project_id');
+
+        return is_numeric($activeProjectId) ? (int) $activeProjectId : null;
     }
 }

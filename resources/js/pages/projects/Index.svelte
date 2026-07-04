@@ -27,9 +27,11 @@
     import FileText from 'lucide-svelte/icons/file-text';
     import Pencil from 'lucide-svelte/icons/pencil';
     import Plus from 'lucide-svelte/icons/plus';
+    import Settings2 from 'lucide-svelte/icons/settings-2';
     import Trash2 from 'lucide-svelte/icons/trash-2';
     import AppHead from '@/components/AppHead.svelte';
     import InputError from '@/components/InputError.svelte';
+    import AutomationSettingsDialog from '@/components/projects/AutomationSettingsDialog.svelte';
     import { Button } from '@/components/ui/button';
     import {
         Dialog,
@@ -90,6 +92,7 @@
     let createOpen = $state(false);
     let editingProject = $state<Project | null>(null);
     let deletingProject = $state<Project | null>(null);
+    let automationProject = $state<Project | null>(null);
 
     const cardIcons = [Building2, FileText, Cloud, Archive];
 
@@ -123,7 +126,6 @@
             href: projectsIndex({ query: { status: 'archived' } }),
         },
     ]);
-
 </script>
 
 <AppHead title="Projects" />
@@ -426,6 +428,26 @@
                                             {/snippet}
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
+                                            class="gap-2 rounded-xl px-3 py-2"
+                                            asChild
+                                        >
+                                            {#snippet children(menuProps)}
+                                                <button
+                                                    id={`automation-settings-project-${project.project_id}`}
+                                                    type="button"
+                                                    class={menuProps.class}
+                                                    onclick={() => {
+                                                        menuProps.onClick?.();
+                                                        automationProject =
+                                                            project;
+                                                    }}
+                                                >
+                                                    <Settings2 class="size-4" />
+                                                    Automation
+                                                </button>
+                                            {/snippet}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
                                             class="gap-2 rounded-xl px-3 py-2 text-red-600 hover:text-red-700"
                                             asChild
                                         >
@@ -564,6 +586,11 @@
         {/if}
     </DialogContent>
 </Dialog>
+
+<AutomationSettingsDialog
+    project={automationProject}
+    onclose={() => (automationProject = null)}
+/>
 
 <Dialog
     open={Boolean(deletingProject)}

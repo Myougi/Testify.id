@@ -1,0 +1,59 @@
+name: automated test run
+
+on:
+  workflow_dispatch:
+    inputs:
+      automation_run_id:
+        description: Testify automation run UUID
+        required: true
+        type: string
+      environment:
+        description: Testify target environment
+        required: true
+        type: environment
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testify-automation-${{ inputs.automation_run_id }}
+  cancel-in-progress: false
+
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: automation/package-lock.json
+
+      - name: Install runner dependencies
+        working-directory: automation
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: automation
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify runner contracts
+        working-directory: automation
+        run: npm test
+
+      - name: Execute automation run
+        working-directory: automation
+        run: npm start
+        env:
+          TESTIFY_APP_URL: ${{ vars.TESTIFY_APP_URL }}
+          TESTIFY_AUTOMATION_RUN_ID: ${{ inputs.automation_run_id }}
+          TESTIFY_CREDENTIAL_PROFILES_JSON: ${{ secrets.TESTIFY_CREDENTIAL_PROFILES_JSON }}
+          TESTIFY_RUNNER_SIGNING_SECRET: ${{ secrets.TESTIFY_RUNNER_SIGNING_SECRET }}

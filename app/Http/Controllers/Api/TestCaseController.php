@@ -33,11 +33,12 @@ class TestCaseController extends Controller
         Gate::authorize('viewAny', TestCase::class);
 
         $filters = $this->validatedFilters($request);
+        $activeProjectId = $this->activeProjectId($request);
 
         return (new TestCaseCollection(
-            $this->testRepositoryService->paginateCasesForUser($request->user(), $filters),
+            $this->testRepositoryService->paginateCasesForUser($request->user(), $filters, $activeProjectId),
         ))->additional([
-            'stats' => $this->testRepositoryService->getStats($request->user()),
+            'stats' => $this->testRepositoryService->getStats($request->user(), $activeProjectId),
             'filters' => [
                 ...$filters,
                 'page' => (int) $request->integer('page', 1),
@@ -45,7 +46,7 @@ class TestCaseController extends Controller
             'options' => [
                 'projects' => $this->testRepositoryService->getProjectOptions($request->user()),
                 'modules' => TestRepositoryModuleResource::collection(
-                    $this->testRepositoryService->getModulesForUser($request->user()),
+                    $this->testRepositoryService->getModulesForUser($request->user(), $activeProjectId),
                 )->resolve(),
                 'priorities' => TestCase::priorities(),
                 'automationStatuses' => TestCase::automationStatuses(),
@@ -107,9 +108,10 @@ class TestCaseController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(TestCase $testCase): TestCaseResource
+    public function show(Request $request, TestCase $testCase): TestCaseResource
     {
         Gate::authorize('view', $testCase);
+        $this->abortWhenOutsideActiveProject($request, $testCase->project_id);
 
         return new TestCaseResource($testCase->load(['project', 'module', 'steps']));
     }
@@ -119,6 +121,8 @@ class TestCaseController extends Controller
      */
     public function update(UpdateTestCaseRequest $request, TestCase $testCase): TestCaseResource
     {
+        $this->abortWhenOutsideActiveProject($request, $testCase->project_id);
+
         return new TestCaseResource(
             $this->testRepositoryService->updateCase($testCase, $request->validated()),
         );
@@ -130,6 +134,7 @@ class TestCaseController extends Controller
     public function destroy(TestCase $testCase): JsonResponse
     {
         Gate::authorize('delete', $testCase);
+        $this->abortWhenOutsideActiveProject(request(), $testCase->project_id);
 
         $testCase->delete();
 
@@ -167,15 +172,15 @@ class TestCaseController extends Controller
 
     private function activeProject(Request $request): ?Project
     {
-        $activeProjectId = $request->session()->get('qa_workspace_project_id');
+        $activeProjectId = $this->activeProjectId($request);
 
-        if (! $request->user() || ! is_numeric($activeProjectId)) {
+        if (! $request->user() || $activeProjectId === null) {
             return null;
         }
 
         return $request->user()
             ->projects()
-            ->whereKey((int) $activeProjectId)
+            ->whereKey($activeProjectId)
             ->first();
     }
 
@@ -210,5 +215,30 @@ class TestCaseController extends Controller
                 )->resolve()
                 : [],
         ];
+    }
+
+    private function activeProjectId(Request $request): ?int
+    {
+        $activeProjectId = $request->session()->get('qa_workspace_project_id');
+
+        if (! $request->user() || ! is_numeric($activeProjectId)) {
+            return null;
+        }
+
+        $projectExists = $request->user()
+            ->projects()
+            ->whereKey((int) $activeProjectId)
+            ->exists();
+
+        return $projectExists ? (int) $activeProjectId : null;
+    }
+
+    private function abortWhenOutsideActiveProject(Request $request, int $projectId): void
+    {
+        $activeProjectId = $this->activeProjectId($request);
+
+        if ($activeProjectId !== null && $activeProjectId !== $projectId) {
+            throw new NotFoundHttpException;
+        }
     }
 }

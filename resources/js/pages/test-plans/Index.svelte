@@ -12,7 +12,6 @@
 </script>
 
 <script lang="ts">
-    import Sparkles from 'lucide-svelte/icons/sparkles';
     import { Link } from '@inertiajs/svelte';
     import Eye from 'lucide-svelte/icons/eye';
     import FileCheck2 from 'lucide-svelte/icons/file-check-2';
@@ -21,10 +20,11 @@
     import Plus from 'lucide-svelte/icons/plus';
     import Search from 'lucide-svelte/icons/search';
     import ShieldAlert from 'lucide-svelte/icons/shield-alert';
+    import Sparkles from 'lucide-svelte/icons/sparkles';
     import Trash2 from 'lucide-svelte/icons/trash-2';
     import { toast } from 'svelte-sonner';
-    import AppHead from '@/components/AppHead.svelte';
     import AiDraftDialog from '@/components/ai/AiDraftDialog.svelte';
+    import AppHead from '@/components/AppHead.svelte';
     import PlanStatusBadge from '@/components/test-plans/PlanStatusBadge.svelte';
     import TestPlanForm from '@/components/test-plans/TestPlanForm.svelte';
     import { Button } from '@/components/ui/button';
@@ -41,8 +41,8 @@
         AiDraftApiError,
         generateAiDraft,
         summarizeAiSourceContext,
-        type TestPlanAiDraft,
     } from '@/lib/api/ai';
+    import type { TestPlanAiDraft } from '@/lib/api/ai';
     import {
         createTestPlan,
         deleteTestPlan,
@@ -279,7 +279,9 @@
 
     const generateCreatePlanDraft = async (): Promise<void> => {
         if (createValues.project_id === null) {
-            createAiError = 'Select a project before generating a test plan draft.';
+            createAiError =
+                'Select a project before generating a test plan draft.';
+
             return;
         }
 
@@ -300,8 +302,7 @@
             );
         } catch (error) {
             if (error instanceof AiDraftApiError && error.status === 422) {
-                createAiError =
-                    Object.values(error.errors)[0] ?? error.message;
+                createAiError = Object.values(error.errors)[0] ?? error.message;
             } else {
                 createAiError =
                     error instanceof Error

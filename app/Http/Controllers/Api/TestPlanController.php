@@ -17,14 +17,14 @@ use App\Services\TestRepositoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class TestPlanController extends Controller
 {
     public function __construct(
         public TestPlanService $testPlanService,
         public TestRepositoryService $testRepositoryService,
-    ) {
-    }
+    ) {}
 
     /**
      * Display a listing of the resource.
@@ -34,11 +34,12 @@ class TestPlanController extends Controller
         Gate::authorize('viewAny', TestPlan::class);
 
         $filters = $this->validatedFilters($request);
+        $activeProjectId = $this->activeProjectId($request);
 
         return (new TestPlanCollection(
-            $this->testPlanService->paginateForUser($request->user(), $filters),
+            $this->testPlanService->paginateForUser($request->user(), $filters, $activeProjectId),
         ))->additional([
-            'stats' => $this->testPlanService->getStats($request->user()),
+            'stats' => $this->testPlanService->getStats($request->user(), $activeProjectId),
             'filters' => [
                 ...$filters,
                 'page' => (int) $request->integer('page', 1),
@@ -65,9 +66,10 @@ class TestPlanController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(TestPlan $testPlan): TestPlanResource
+    public function show(Request $request, TestPlan $testPlan): TestPlanResource
     {
         Gate::authorize('view', $testPlan);
+        $this->abortWhenOutsideActiveProject($request, $testPlan->project_id);
 
         return new TestPlanResource(
             $this->testPlanService->getDetail($testPlan),
@@ -77,6 +79,7 @@ class TestPlanController extends Controller
     public function availableTestCases(Request $request, TestPlan $testPlan): TestCaseCollection
     {
         Gate::authorize('view', $testPlan);
+        $this->abortWhenOutsideActiveProject($request, $testPlan->project_id);
 
         $filters = $this->validatedAvailableCaseFilters($request);
 
@@ -103,6 +106,8 @@ class TestPlanController extends Controller
         AssignTestPlanCasesRequest $request,
         TestPlan $testPlan,
     ): JsonResponse {
+        $this->abortWhenOutsideActiveProject($request, $testPlan->project_id);
+
         $updatedPlan = $this->testPlanService->attachTestCases(
             $testPlan,
             array_map('intval', $request->validated('test_case_ids')),
@@ -117,6 +122,7 @@ class TestPlanController extends Controller
     public function detachTestCase(TestPlan $testPlan, TestCase $testCase): JsonResponse
     {
         Gate::authorize('update', $testPlan);
+        $this->abortWhenOutsideActiveProject(request(), $testPlan->project_id);
 
         $updatedPlan = $this->testPlanService->detachTestCase($testPlan, $testCase);
 
@@ -131,6 +137,8 @@ class TestPlanController extends Controller
      */
     public function update(UpdateTestPlanRequest $request, TestPlan $testPlan): TestPlanResource
     {
+        $this->abortWhenOutsideActiveProject($request, $testPlan->project_id);
+
         return new TestPlanResource(
             $this->testPlanService->update($testPlan, $request->validated()),
         );
@@ -142,6 +150,7 @@ class TestPlanController extends Controller
     public function destroy(TestPlan $testPlan): JsonResponse
     {
         Gate::authorize('delete', $testPlan);
+        $this->abortWhenOutsideActiveProject(request(), $testPlan->project_id);
 
         $testPlan->delete();
 
@@ -196,5 +205,30 @@ class TestPlanController extends Controller
             'test_type' => (string) ($validated['test_type'] ?? 'all'),
             'per_page' => (int) ($validated['per_page'] ?? 10),
         ];
+    }
+
+    private function activeProjectId(Request $request): ?int
+    {
+        $activeProjectId = $request->session()->get('qa_workspace_project_id');
+
+        if (! $request->user() || ! is_numeric($activeProjectId)) {
+            return null;
+        }
+
+        $projectExists = $request->user()
+            ->projects()
+            ->whereKey((int) $activeProjectId)
+            ->exists();
+
+        return $projectExists ? (int) $activeProjectId : null;
+    }
+
+    private function abortWhenOutsideActiveProject(Request $request, int $projectId): void
+    {
+        $activeProjectId = $this->activeProjectId($request);
+
+        if ($activeProjectId !== null && $activeProjectId !== $projectId) {
+            throw new NotFoundHttpException;
+        }
     }
 }

@@ -1,6 +1,9 @@
 /.phpunit.cache
 /bootstrap/ssr
 /node_modules
+/automation/node_modules
+/automation/dist
+/automation/test-results
 /public/build
 /public/fonts-manifest.dev.json
 /public/hot
@@ -30,3 +33,4 @@ yarn-error.log
 /AGENTS.md
 /design-qa.md
 /tmp
+/.tmp

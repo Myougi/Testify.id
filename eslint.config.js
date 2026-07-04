@@ -73,7 +73,14 @@ export default ts.config(
             'import/order': [
                 'error',
                 {
-                    groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
+                    groups: [
+                        'builtin',
+                        'external',
+                        'internal',
+                        'parent',
+                        'sibling',
+                        'index',
+                    ],
                     alphabetize: { order: 'asc', caseInsensitive: true },
                 },
             ],
@@ -88,7 +95,11 @@ export default ts.config(
             '@stylistic': stylistic,
         },
         rules: {
-            '@stylistic/brace-style': ['error', '1tbs', { allowSingleLine: false }],
+            '@stylistic/brace-style': [
+                'error',
+                '1tbs',
+                { allowSingleLine: false },
+            ],
             '@stylistic/padding-line-between-statements': [
                 'error',
                 ...paddingAroundControl,
@@ -101,6 +112,7 @@ export default ts.config(
             'node_modules',
             'public',
             'bootstrap/ssr',
+            'automation/dist',
             'tailwind.config.js',
             'vite.config.ts',
             'resources/js/actions/**',
@@ -116,7 +128,11 @@ export default ts.config(
         },
         rules: {
             curly: ['error', 'all'],
-            '@stylistic/brace-style': ['error', '1tbs', { allowSingleLine: false }],
+            '@stylistic/brace-style': [
+                'error',
+                '1tbs',
+                { allowSingleLine: false },
+            ],
         },
     },
 );

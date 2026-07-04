@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class TestRepositoryPageController extends Controller
 {
@@ -29,10 +30,11 @@ class TestRepositoryPageController extends Controller
         Gate::authorize('viewAny', TestCase::class);
 
         $filters = $this->validatedFilters($request);
+        $activeProjectId = $this->activeProjectId($request);
         $payload = (new TestCaseCollection(
-            $this->testRepositoryService->paginateCasesForUser($request->user(), $filters),
+            $this->testRepositoryService->paginateCasesForUser($request->user(), $filters, $activeProjectId),
         ))->additional([
-            'stats' => $this->testRepositoryService->getStats($request->user()),
+            'stats' => $this->testRepositoryService->getStats($request->user(), $activeProjectId),
             'filters' => [
                 ...$filters,
                 'page' => $request->integer('page', 1),
@@ -58,6 +60,7 @@ class TestRepositoryPageController extends Controller
     public function edit(TestCase $testCase, Request $request): Response
     {
         Gate::authorize('update', $testCase);
+        $this->abortWhenOutsideActiveProject($request, $testCase->project_id);
 
         return Inertia::render('test-repositories/Edit', [
             'testCase' => (new TestCaseResource($testCase->load(['project', 'module', 'steps'])))->resolve(),
@@ -98,11 +101,12 @@ class TestRepositoryPageController extends Controller
     private function optionsFor(Request $request): array
     {
         $activeProject = $this->activeProject($request);
+        $activeProjectId = $activeProject?->project_id;
 
         return [
             'projects' => $this->testRepositoryService->getProjectOptions($request->user()),
             'modules' => TestRepositoryModuleResource::collection(
-                $this->testRepositoryService->getModulesForUser($request->user()),
+                $this->testRepositoryService->getModulesForUser($request->user(), $activeProjectId),
             )->resolve(),
             'priorities' => TestCase::priorities(),
             'automationStatuses' => TestCase::automationStatuses(),
@@ -131,15 +135,40 @@ class TestRepositoryPageController extends Controller
 
     private function activeProject(Request $request): ?Project
     {
+        $activeProjectId = $this->activeProjectId($request);
+
+        if (! $request->user() || $activeProjectId === null) {
+            return null;
+        }
+
+        return $request->user()
+            ->projects()
+            ->whereKey($activeProjectId)
+            ->first();
+    }
+
+    private function activeProjectId(Request $request): ?int
+    {
         $activeProjectId = $request->session()->get('qa_workspace_project_id');
 
         if (! $request->user() || ! is_numeric($activeProjectId)) {
             return null;
         }
 
-        return $request->user()
+        $projectExists = $request->user()
             ->projects()
             ->whereKey((int) $activeProjectId)
-            ->first();
+            ->exists();
+
+        return $projectExists ? (int) $activeProjectId : null;
+    }
+
+    private function abortWhenOutsideActiveProject(Request $request, int $projectId): void
+    {
+        $activeProjectId = $this->activeProjectId($request);
+
+        if ($activeProjectId !== null && $activeProjectId !== $projectId) {
+            throw new NotFoundHttpException;
+        }
     }
 }

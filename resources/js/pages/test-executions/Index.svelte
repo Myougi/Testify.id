@@ -343,7 +343,10 @@
         } catch (error) {
             if (error instanceof TestRunApiError && error.status === 422) {
                 toast.error(
-                    error.errors.status ?? 'Unable to start the test run.',
+                    error.errors.automation ??
+                        error.errors.environment ??
+                        error.errors.status ??
+                        'Unable to start the test run.',
                 );
             } else {
                 toast.error(

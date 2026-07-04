@@ -192,4 +192,10 @@ class TestRun extends Model
     {
         return $this->hasMany(Issue::class);
     }
+
+    /** @return HasMany<AutomationRun, $this> */
+    public function automationRuns(): HasMany
+    {
+        return $this->hasMany(AutomationRun::class);
+    }
 }

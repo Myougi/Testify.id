@@ -19,6 +19,7 @@
     import { router } from '@inertiajs/svelte';
     import { toast } from 'svelte-sonner';
     import AppHead from '@/components/AppHead.svelte';
+    import AutomationPanel from '@/components/test-repositories/AutomationPanel.svelte';
     import TestCaseForm from '@/components/test-repositories/TestCaseForm.svelte';
     import {
         TestRepositoryApiError,
@@ -99,3 +100,7 @@
     onsubmit={submit}
     oncancel={() => router.visit('/test-repositories')}
 />
+
+{#if values.automation_status === 'Automated'}
+    <AutomationPanel testCaseId={testCase.id} />
+{/if}

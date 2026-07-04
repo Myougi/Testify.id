@@ -3,21 +3,22 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\TestCaseCollection;
+use App\Http\Resources\TestPlanCollection;
 use App\Http\Resources\TestPlanResource;
 use App\Http\Resources\TestRepositoryModuleResource;
 use App\Http\Resources\TestRunCollection;
 use App\Models\TestCase;
-use App\Http\Resources\TestPlanCollection;
 use App\Models\TestPlan;
-use App\Services\TestPlanService;
 use App\Services\TestPlanPdfService;
+use App\Services\TestPlanService;
 use App\Services\TestRepositoryService;
 use App\Services\TestRunService;
-use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class TestPlanPageController extends Controller
 {
@@ -26,8 +27,7 @@ class TestPlanPageController extends Controller
         public TestPlanPdfService $testPlanPdfService,
         public TestRepositoryService $testRepositoryService,
         public TestRunService $testRunService,
-    ) {
-    }
+    ) {}
 
     /**
      * Display a listing of the resource.
@@ -37,7 +37,8 @@ class TestPlanPageController extends Controller
         Gate::authorize('viewAny', TestPlan::class);
 
         $projects = $this->testPlanService->getProjectOptions($request->user());
-        $selectedProjectId = $request->integer('project_id');
+        $activeProjectId = $this->activeProjectId($request);
+        $selectedProjectId = $activeProjectId ?? $request->integer('project_id');
 
         if (! in_array($selectedProjectId, array_column($projects, 'id'), true)) {
             $selectedProjectId = null;
@@ -51,9 +52,9 @@ class TestPlanPageController extends Controller
         ];
 
         $payload = (new TestPlanCollection(
-            $this->testPlanService->paginateForUser($request->user(), $filters),
+            $this->testPlanService->paginateForUser($request->user(), $filters, $activeProjectId),
         ))->additional([
-            'stats' => $this->testPlanService->getStats($request->user()),
+            'stats' => $this->testPlanService->getStats($request->user(), $activeProjectId),
             'filters' => [
                 ...$filters,
                 'page' => $request->integer('page', 1),
@@ -74,6 +75,7 @@ class TestPlanPageController extends Controller
     public function show(Request $request, TestPlan $testPlan): Response
     {
         Gate::authorize('view', $testPlan);
+        $this->abortWhenOutsideActiveProject($request, $testPlan->project_id);
 
         $filters = $this->availableCaseFilters($request);
         $detail = (new TestPlanResource(
@@ -108,9 +110,10 @@ class TestPlanPageController extends Controller
         ]);
     }
 
-    public function export(TestPlan $testPlan): HttpResponse
+    public function export(Request $request, TestPlan $testPlan): HttpResponse
     {
         Gate::authorize('view', $testPlan);
+        $this->abortWhenOutsideActiveProject($request, $testPlan->project_id);
 
         return $this->testPlanPdfService->download($testPlan);
     }
@@ -140,5 +143,30 @@ class TestPlanPageController extends Controller
             'test_type' => (string) ($validated['test_type'] ?? 'all'),
             'per_page' => (int) ($validated['per_page'] ?? 10),
         ];
+    }
+
+    private function activeProjectId(Request $request): ?int
+    {
+        $activeProjectId = $request->session()->get('qa_workspace_project_id');
+
+        if (! $request->user() || ! is_numeric($activeProjectId)) {
+            return null;
+        }
+
+        $projectExists = $request->user()
+            ->projects()
+            ->whereKey((int) $activeProjectId)
+            ->exists();
+
+        return $projectExists ? (int) $activeProjectId : null;
+    }
+
+    private function abortWhenOutsideActiveProject(Request $request, int $projectId): void
+    {
+        $activeProjectId = $this->activeProjectId($request);
+
+        if ($activeProjectId !== null && $activeProjectId !== $projectId) {
+            throw new NotFoundHttpException;
+        }
     }
 }

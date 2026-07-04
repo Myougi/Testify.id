@@ -2,10 +2,11 @@
 
 namespace App\Services;
 
-use App\Models\TestPlan;
 use App\Models\TestCase;
+use App\Models\TestPlan;
 use App\Models\TestRun;
 use App\Models\User;
+use App\Services\Automation\AutomationDispatchService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -13,15 +14,17 @@ use Illuminate\Validation\ValidationException;
 
 class TestRunService
 {
+    public function __construct(private readonly AutomationDispatchService $automationDispatchService) {}
+
     /**
      * @param  array<string, mixed>  $filters
      * @return LengthAwarePaginator<int, TestRun>
      */
-    public function paginateForUser(User $user, array $filters = []): LengthAwarePaginator
+    public function paginateForUser(User $user, array $filters = [], ?int $activeProjectId = null): LengthAwarePaginator
     {
         $perPage = max(5, min(50, (int) ($filters['per_page'] ?? 10)));
 
-        return $this->applyFilters($this->queryForUser($user), $filters)
+        return $this->applyFilters($this->queryForUser($user, $activeProjectId), $filters)
             ->latest()
             ->paginate($perPage)
             ->withQueryString();
@@ -47,9 +50,9 @@ class TestRunService
     /**
      * @return array<string, int>
      */
-    public function getStats(User $user): array
+    public function getStats(User $user, ?int $activeProjectId = null): array
     {
-        $query = $this->queryForUser($user)->toBase();
+        $query = $this->queryForUser($user, $activeProjectId)->toBase();
 
         return [
             'totalRuns' => (clone $query)->count(),
@@ -64,17 +67,22 @@ class TestRunService
     /**
      * @return array<int, array{id: int, name: string, project: array{id: int, name: string|null}, test_cases: array<int, array{id: int, case_key: string, title: string, priority: string, automation_status: string, test_behavior: string, test_type: string, module: array{id: int, name: string|null}}>}>
      */
-    public function getTestPlanOptions(User $user): array
+    public function getTestPlanOptions(User $user, ?int $activeProjectId = null): array
     {
-        $testPlans = TestPlan::query()
+        $testPlansQuery = TestPlan::query()
             ->with([
                 'project:project_id,project_name,user_id',
                 'testCases:id,project_id,module_id,case_key,title,priority,automation_status,test_behavior,test_type',
                 'testCases.module:id,name',
             ])
             ->whereIn('project_id', $user->projects()->select('project_id'))
-            ->orderBy('name')
-            ->get();
+            ->orderBy('name');
+
+        if ($activeProjectId !== null) {
+            $testPlansQuery->where('project_id', $activeProjectId);
+        }
+
+        $testPlans = $testPlansQuery->get();
 
         $options = [];
 
@@ -153,16 +161,22 @@ class TestRunService
             ]);
         }
 
-        if (TestRun::normalizeStatus($testRun->status) === TestRun::STATUS_NEW) {
-            $testRun->forceFill([
-                'status' => TestRun::STATUS_IN_PROGRESS,
-                'execution_started_at' => $testRun->execution_started_at ?? now(),
-            ])->save();
-        } elseif ($testRun->execution_started_at === null) {
-            $testRun->forceFill([
-                'execution_started_at' => now(),
-            ])->save();
-        }
+        $this->automationDispatchService->assertCanStart($testRun);
+
+        DB::transaction(function () use ($testRun): void {
+            if (TestRun::normalizeStatus($testRun->status) === TestRun::STATUS_NEW) {
+                $testRun->forceFill([
+                    'status' => TestRun::STATUS_IN_PROGRESS,
+                    'execution_started_at' => $testRun->execution_started_at ?? now(),
+                ])->save();
+            } elseif ($testRun->execution_started_at === null) {
+                $testRun->forceFill([
+                    'execution_started_at' => now(),
+                ])->save();
+            }
+
+            $this->automationDispatchService->dispatchForTestRun($testRun);
+        });
 
         return $this->getDetail($testRun->fresh());
     }
@@ -201,6 +215,11 @@ class TestRunService
             'testCases:id,project_id,module_id,case_key,title,priority,automation_status,test_behavior,test_type',
             'testCases.module:id,name',
         ])->loadCount('testCases');
+    }
+
+    public function refreshLifecycleStatus(TestRun $testRun): void
+    {
+        $this->syncLifecycleStatus($testRun);
     }
 
     /**
@@ -320,9 +339,9 @@ class TestRunService
     /**
      * @return Builder<TestRun>
      */
-    private function queryForUser(User $user): Builder
+    private function queryForUser(User $user, ?int $activeProjectId = null): Builder
     {
-        return TestRun::query()
+        $query = TestRun::query()
             ->with([
                 'testPlan.project:project_id,project_name,user_id',
                 'testCases:id,project_id,module_id,case_key,title,priority,automation_status,test_behavior,test_type',
@@ -332,5 +351,13 @@ class TestRunService
             ->whereHas('testPlan.project', function (Builder $projectQuery) use ($user): void {
                 $projectQuery->where('user_id', $user->id);
             });
+
+        if ($activeProjectId !== null) {
+            $query->whereHas('testPlan', function (Builder $planQuery) use ($activeProjectId): void {
+                $planQuery->where('project_id', $activeProjectId);
+            });
+        }
+
+        return $query;
     }
 }

@@ -20,6 +20,11 @@ return [
         env('FILESYSTEM_DISK', 'local'),
     ),
 
+    'automation_artifacts_disk' => env(
+        'AUTOMATION_ARTIFACTS_DISK',
+        env('FILESYSTEM_DISK', 'local'),
+    ),
+
     /*
     |--------------------------------------------------------------------------
     | Filesystem Disks

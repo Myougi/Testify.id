@@ -6,6 +6,7 @@ use App\Models\TestPlan;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreTestPlanRequest extends FormRequest
 {
@@ -45,5 +46,28 @@ class StoreTestPlanRequest extends FormRequest
             'release_version' => ['nullable', 'string', 'max:255'],
             'tester' => ['nullable', 'string', 'max:255'],
         ];
+    }
+
+    /**
+     * @return array<int, callable(Validator): void>
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                $activeProjectId = $this->activeProjectId();
+
+                if ($activeProjectId !== null && $this->integer('project_id') !== $activeProjectId) {
+                    $validator->errors()->add('project_id', 'Test plans must use the active project.');
+                }
+            },
+        ];
+    }
+
+    private function activeProjectId(): ?int
+    {
+        $activeProjectId = $this->session()->get('qa_workspace_project_id');
+
+        return is_numeric($activeProjectId) ? (int) $activeProjectId : null;
     }
 }

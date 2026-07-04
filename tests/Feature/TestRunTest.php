@@ -60,6 +60,37 @@ test('authenticated users can visit the test executions page', function (): void
         ->where('initialPayload.options.testPlans.0.test_cases.0.case_key', 'CORE-001'));
 });
 
+test('test executions page only displays runs from the active project', function (): void {
+    $user = User::factory()->create();
+    $activeProject = Project::factory()->for($user)->create();
+    $otherProject = Project::factory()->for($user)->create();
+    $activePlan = TestPlan::factory()->for($activeProject, 'project')->create([
+        'name' => 'Visible plan',
+    ]);
+    $otherPlan = TestPlan::factory()->for($otherProject, 'project')->create([
+        'name' => 'Hidden plan',
+    ]);
+    $activeRun = TestRun::factory()->for($activePlan)->create([
+        'name' => 'Visible run',
+    ]);
+    TestRun::factory()->for($otherPlan)->create([
+        'name' => 'Hidden run',
+    ]);
+
+    $response = $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $activeProject->project_id])
+        ->get(route('test-executions.index'));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->component('test-executions/Index')
+        ->has('initialPayload.data', 1)
+        ->where('initialPayload.data.0.id', $activeRun->id)
+        ->where('initialPayload.stats.totalRuns', 1)
+        ->has('initialPayload.options.testPlans', 1)
+        ->where('initialPayload.options.testPlans.0.id', $activePlan->id));
+});
+
 test('authenticated users can visit a read only test run detail page', function (): void {
     $user = User::factory()->create();
     $project = Project::factory()->for($user)->create([
@@ -113,6 +144,19 @@ test('users cannot visit another users test run detail page', function (): void 
     $response->assertForbidden();
 });
 
+test('users cannot visit a sibling-project test run detail page while another project is active', function (): void {
+    $user = User::factory()->create();
+    $activeProject = Project::factory()->for($user)->create();
+    $otherProject = Project::factory()->for($user)->create();
+    $foreignPlan = TestPlan::factory()->for($otherProject, 'project')->create();
+    $foreignRun = TestRun::factory()->for($foreignPlan)->create();
+
+    $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $activeProject->project_id])
+        ->get(route('test-executions.show', $foreignRun))
+        ->assertNotFound();
+});
+
 test('users can list only test runs from their own plans', function (): void {
     $user = User::factory()->create();
     $project = Project::factory()->for($user)->create();
@@ -134,6 +178,35 @@ test('users can list only test runs from their own plans', function (): void {
     $response->assertJsonCount(1, 'data');
     $response->assertJsonPath('data.0.id', $visibleRun->id);
     $response->assertJsonPath('data.0.name', 'Visible run');
+});
+
+test('test execution api only lists runs from the active project', function (): void {
+    $user = User::factory()->create();
+    $activeProject = Project::factory()->for($user)->create();
+    $otherProject = Project::factory()->for($user)->create();
+    $activePlan = TestPlan::factory()->for($activeProject, 'project')->create([
+        'name' => 'Visible plan',
+    ]);
+    $otherPlan = TestPlan::factory()->for($otherProject, 'project')->create([
+        'name' => 'Hidden plan',
+    ]);
+    $activeRun = TestRun::factory()->for($activePlan)->create([
+        'name' => 'Visible run',
+    ]);
+    TestRun::factory()->for($otherPlan)->create([
+        'name' => 'Hidden run',
+    ]);
+
+    $response = $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $activeProject->project_id])
+        ->getJson(route('api.test-runs.index'));
+
+    $response->assertOk();
+    $response->assertJsonCount(1, 'data');
+    $response->assertJsonPath('data.0.id', $activeRun->id);
+    $response->assertJsonCount(1, 'options.testPlans');
+    $response->assertJsonPath('options.testPlans.0.id', $activePlan->id);
+    $response->assertJsonPath('stats.totalRuns', 1);
 });
 
 test('users can create a test run with priority multiple selected plan cases and new status', function (): void {

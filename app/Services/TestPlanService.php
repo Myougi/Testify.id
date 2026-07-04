@@ -17,11 +17,11 @@ class TestPlanService
      * @param  array<string, mixed>  $filters
      * @return LengthAwarePaginator<int, TestPlan>
      */
-    public function paginateForUser(User $user, array $filters = []): LengthAwarePaginator
+    public function paginateForUser(User $user, array $filters = [], ?int $activeProjectId = null): LengthAwarePaginator
     {
         $perPage = max(5, min(50, (int) ($filters['per_page'] ?? 10)));
 
-        return $this->applyFilters($this->queryForUser($user), $filters)
+        return $this->applyFilters($this->queryForUser($user, $activeProjectId), $filters)
             ->latest()
             ->paginate($perPage)
             ->withQueryString();
@@ -30,9 +30,9 @@ class TestPlanService
     /**
      * @return array<string, int>
      */
-    public function getStats(User $user): array
+    public function getStats(User $user, ?int $activeProjectId = null): array
     {
-        $query = $this->queryForUser($user)->toBase();
+        $query = $this->queryForUser($user, $activeProjectId)->toBase();
         $today = Carbon::today()->toDateString();
 
         return [
@@ -193,14 +193,20 @@ class TestPlanService
     /**
      * @return Builder<TestPlan>
      */
-    private function queryForUser(User $user): Builder
+    private function queryForUser(User $user, ?int $activeProjectId = null): Builder
     {
-        return TestPlan::query()
+        $query = TestPlan::query()
             ->with([
                 'project:project_id,project_name,user_id',
             ])
             ->withCount('testCases')
             ->whereIn('project_id', $user->projects()->select('project_id'));
+
+        if ($activeProjectId !== null) {
+            $query->where('project_id', $activeProjectId);
+        }
+
+        return $query;
     }
 
     /**

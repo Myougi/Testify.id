@@ -14,12 +14,11 @@ use App\Services\TestRunService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class TestRunController extends Controller
 {
-    public function __construct(public TestRunService $testRunService)
-    {
-    }
+    public function __construct(public TestRunService $testRunService) {}
 
     /**
      * Display a listing of the resource.
@@ -29,17 +28,18 @@ class TestRunController extends Controller
         Gate::authorize('viewAny', TestRun::class);
 
         $filters = $this->validatedFilters($request);
+        $activeProjectId = $this->activeProjectId($request);
 
         return (new TestRunCollection(
-            $this->testRunService->paginateForUser($request->user(), $filters),
+            $this->testRunService->paginateForUser($request->user(), $filters, $activeProjectId),
         ))->additional([
-            'stats' => $this->testRunService->getStats($request->user()),
+            'stats' => $this->testRunService->getStats($request->user(), $activeProjectId),
             'filters' => [
                 ...$filters,
                 'page' => (int) $request->integer('page', 1),
             ],
             'options' => [
-                'testPlans' => $this->testRunService->getTestPlanOptions($request->user()),
+                'testPlans' => $this->testRunService->getTestPlanOptions($request->user(), $activeProjectId),
                 'environments' => TestRun::environments(),
                 'priorities' => TestRun::priorities(),
                 'statuses' => TestRun::statuses(),
@@ -65,9 +65,10 @@ class TestRunController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(TestRun $testRun): TestRunResource
+    public function show(Request $request, TestRun $testRun): TestRunResource
     {
         Gate::authorize('view', $testRun);
+        $this->abortWhenOutsideActiveProject($request, $testRun->testPlan->project_id);
 
         return new TestRunResource(
             $this->testRunService->getDetail($testRun),
@@ -79,6 +80,8 @@ class TestRunController extends Controller
      */
     public function update(UpdateTestRunRequest $request, TestRun $testRun): TestRunResource
     {
+        $this->abortWhenOutsideActiveProject($request, $testRun->testPlan->project_id);
+
         $validated = $request->validated();
         $testCaseIds = array_map('intval', $validated['test_case_ids']);
         unset($validated['test_case_ids']);
@@ -88,9 +91,10 @@ class TestRunController extends Controller
         );
     }
 
-    public function start(TestRun $testRun): TestRunResource
+    public function start(Request $request, TestRun $testRun): TestRunResource
     {
         Gate::authorize('update', $testRun);
+        $this->abortWhenOutsideActiveProject($request, $testRun->testPlan->project_id);
 
         return new TestRunResource(
             $this->testRunService->start($testRun),
@@ -102,6 +106,8 @@ class TestRunController extends Controller
         TestRun $testRun,
         TestCase $testCase,
     ): TestRunResource {
+        $this->abortWhenOutsideActiveProject($request, $testRun->testPlan->project_id);
+
         return new TestRunResource(
             $this->testRunService->updateCaseStatus(
                 $testRun,
@@ -117,6 +123,7 @@ class TestRunController extends Controller
     public function destroy(TestRun $testRun): JsonResponse
     {
         Gate::authorize('delete', $testRun);
+        $this->abortWhenOutsideActiveProject(request(), $testRun->testPlan->project_id);
 
         $testRun->delete();
 
@@ -148,5 +155,30 @@ class TestRunController extends Controller
             'test_plan_id' => isset($validated['test_plan_id']) ? (int) $validated['test_plan_id'] : null,
             'per_page' => (int) ($validated['per_page'] ?? 10),
         ];
+    }
+
+    private function activeProjectId(Request $request): ?int
+    {
+        $activeProjectId = $request->session()->get('qa_workspace_project_id');
+
+        if (! $request->user() || ! is_numeric($activeProjectId)) {
+            return null;
+        }
+
+        $projectExists = $request->user()
+            ->projects()
+            ->whereKey((int) $activeProjectId)
+            ->exists();
+
+        return $projectExists ? (int) $activeProjectId : null;
+    }
+
+    private function abortWhenOutsideActiveProject(Request $request, int $projectId): void
+    {
+        $activeProjectId = $this->activeProjectId($request);
+
+        if ($activeProjectId !== null && $activeProjectId !== $projectId) {
+            throw new NotFoundHttpException;
+        }
     }
 }

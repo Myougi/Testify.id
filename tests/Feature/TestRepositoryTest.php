@@ -108,6 +108,63 @@ test('repository page includes ai modal options for the active project only', fu
         ->where('initialPayload.options.aiGeneration.modules.0.id', $activeModule->id));
 });
 
+test('repository page only displays cases and folders from the active project', function (): void {
+    $user = User::factory()->create();
+    $activeProject = Project::factory()->for($user)->create([
+        'project_name' => 'Storefront',
+    ]);
+    $otherProject = Project::factory()->for($user)->create([
+        'project_name' => 'Backoffice',
+    ]);
+    $activeModule = TestRepositoryModule::factory()->for($activeProject, 'project')->create([
+        'name' => 'Checkout',
+    ]);
+    $otherModule = TestRepositoryModule::factory()->for($otherProject, 'project')->create([
+        'name' => 'Billing',
+    ]);
+    $activeCase = RepositoryTestCase::factory()
+        ->for($activeProject, 'project')
+        ->for($activeModule, 'module')
+        ->create([
+            'title' => 'Visible checkout case',
+        ]);
+    RepositoryTestCase::factory()
+        ->for($otherProject, 'project')
+        ->for($otherModule, 'module')
+        ->create([
+            'title' => 'Hidden billing case',
+        ]);
+
+    $response = $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $activeProject->project_id])
+        ->get(route('test-repositories.index'));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->component('test-repositories/Index')
+        ->has('initialPayload.data', 1)
+        ->where('initialPayload.data.0.id', $activeCase->id)
+        ->where('initialPayload.stats.totalCases', 1)
+        ->has('initialPayload.options.modules', 1)
+        ->where('initialPayload.options.modules.0.id', $activeModule->id));
+});
+
+test('repository edit page rejects cases outside the active project', function (): void {
+    $user = User::factory()->create();
+    $activeProject = Project::factory()->for($user)->create();
+    $otherProject = Project::factory()->for($user)->create();
+    $otherModule = TestRepositoryModule::factory()->for($otherProject, 'project')->create();
+    $foreignCase = RepositoryTestCase::factory()
+        ->for($otherProject, 'project')
+        ->for($otherModule, 'module')
+        ->create();
+
+    $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $activeProject->project_id])
+        ->get(route('test-repositories.test-cases.edit', $foreignCase))
+        ->assertNotFound();
+});
+
 test('repository page returns disabled ai options when no active project is selected', function (): void {
     $user = User::factory()->create();
     $project = Project::factory()->for($user)->create();
@@ -248,6 +305,32 @@ test('users can list only repository test cases from their own projects', functi
     $response->assertOk();
     $response->assertJsonCount(1, 'data');
     $response->assertJsonPath('data.0.id', $visibleCase->id);
+});
+
+test('repository api only lists cases and folders from the active project', function (): void {
+    $user = User::factory()->create();
+    $activeProject = Project::factory()->for($user)->create();
+    $otherProject = Project::factory()->for($user)->create();
+    $activeModule = TestRepositoryModule::factory()->for($activeProject, 'project')->create();
+    TestRepositoryModule::factory()->for($otherProject, 'project')->create();
+    $activeCase = RepositoryTestCase::factory()
+        ->for($activeProject, 'project')
+        ->for($activeModule, 'module')
+        ->create();
+    RepositoryTestCase::factory()
+        ->for($otherProject, 'project')
+        ->create();
+
+    $response = $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $activeProject->project_id])
+        ->getJson(route('api.test-cases.index'));
+
+    $response->assertOk();
+    $response->assertJsonCount(1, 'data');
+    $response->assertJsonPath('data.0.id', $activeCase->id);
+    $response->assertJsonCount(1, 'options.modules');
+    $response->assertJsonPath('options.modules.0.id', $activeModule->id);
+    $response->assertJsonPath('stats.totalCases', 1);
 });
 
 test('users can filter repository test cases by module descendants and test type', function (): void {

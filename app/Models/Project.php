@@ -5,9 +5,9 @@ namespace App\Models;
 use Database\Factories\ProjectFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
@@ -73,5 +73,17 @@ class Project extends Model
     public function issues(): HasMany
     {
         return $this->hasMany(Issue::class, 'project_id', 'project_id');
+    }
+
+    /** @return HasMany<ProjectEnvironment, $this> */
+    public function environments(): HasMany
+    {
+        return $this->hasMany(ProjectEnvironment::class, 'project_id', 'project_id');
+    }
+
+    /** @return HasMany<ProjectCredentialProfile, $this> */
+    public function credentialProfiles(): HasMany
+    {
+        return $this->hasMany(ProjectCredentialProfile::class, 'project_id', 'project_id');
     }
 }

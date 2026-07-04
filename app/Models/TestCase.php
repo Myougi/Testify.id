@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
@@ -25,7 +27,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $preconditions
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
- * @property \Illuminate\Database\Eloquent\Relations\Pivot|null $pivot
+ * @property Pivot|null $pivot
  */
 #[Fillable([
     'project_id',
@@ -163,7 +165,7 @@ class TestCase extends Model
     /**
      * @return BelongsToMany<TestPlan, $this>
      */
-    public function testPlans(): BelongsToMany
+    public function test_plans(): BelongsToMany
     {
         return $this->belongsToMany(TestPlan::class)->withTimestamps();
     }
@@ -171,8 +173,14 @@ class TestCase extends Model
     /**
      * @return BelongsToMany<TestRun, $this>
      */
-    public function testRuns(): BelongsToMany
+    public function test_runs(): BelongsToMany
     {
         return $this->belongsToMany(TestRun::class)->withTimestamps();
+    }
+
+    /** @return HasOne<TestCaseAutomation, $this> */
+    public function automation(): HasOne
+    {
+        return $this->hasOne(TestCaseAutomation::class);
     }
 }

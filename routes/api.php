@@ -1,6 +1,9 @@
 <?php
 
+use App\Http\Controllers\Api\Runner\V1\AutomationRunController as RunnerAutomationRunController;
 use App\Http\Controllers\Api\V1\AuthTokenController;
+use App\Http\Controllers\Api\V1\AutomationController;
+use App\Http\Controllers\Api\V1\AutomationRunController;
 use App\Http\Controllers\Api\V1\CurrentUserController;
 use App\Http\Controllers\Api\V1\IssueController;
 use App\Http\Controllers\Api\V1\OpenApiController;
@@ -12,6 +15,16 @@ use App\Http\Controllers\Api\V1\TestPlanController;
 use App\Http\Controllers\Api\V1\TestRunController;
 use App\Http\Controllers\Api\V1\TokenController;
 use Illuminate\Support\Facades\Route;
+
+Route::prefix('runner/v1')
+    ->middleware(['automation.runner', 'throttle:automation-runner'])
+    ->group(function (): void {
+        Route::get('automation-runs/{automationRun}', [RunnerAutomationRunController::class, 'show']);
+        Route::post('automation-runs/{automationRun}/start', [RunnerAutomationRunController::class, 'start']);
+        Route::post('automation-runs/{automationRun}/executions/{execution}/result', [RunnerAutomationRunController::class, 'result']);
+        Route::post('automation-runs/{automationRun}/executions/{execution}/artifacts', [RunnerAutomationRunController::class, 'reserveArtifact']);
+        Route::post('automation-runs/{automationRun}/executions/{execution}/artifacts/{artifact}/finalize', [RunnerAutomationRunController::class, 'finalizeArtifact']);
+    });
 
 Route::prefix('v1')->middleware(['api.request-id', 'api.json', 'api.sparse-fields'])->group(function (): void {
     Route::post('auth/tokens', [AuthTokenController::class, 'store'])
@@ -36,6 +49,8 @@ Route::prefix('v1')->middleware(['api.request-id', 'api.json', 'api.sparse-field
 
         Route::get('projects', [ProjectController::class, 'index'])->middleware(['api.ability:projects:read', 'throttle:api-read']);
         Route::get('projects/{project}', [ProjectController::class, 'show'])->middleware(['api.ability:projects:read', 'throttle:api-read']);
+        Route::get('projects/{project}/automation-settings', [AutomationController::class, 'settings'])->middleware(['api.ability:automations:read', 'throttle:api-read']);
+        Route::patch('projects/{project}/automation-settings', [AutomationController::class, 'updateSettings'])->middleware(['api.ability:automations:write', 'throttle:api-write']);
         Route::post('projects', [ProjectController::class, 'store'])->middleware(['api.ability:projects:write', 'throttle:api-write']);
         Route::patch('projects/{project}', [ProjectController::class, 'update'])->middleware(['api.ability:projects:write', 'throttle:api-write']);
         Route::delete('projects/{project}', [ProjectController::class, 'destroy'])->middleware(['api.ability:projects:write', 'throttle:api-write']);
@@ -68,6 +83,16 @@ Route::prefix('v1')->middleware(['api.request-id', 'api.json', 'api.sparse-field
         Route::delete('test-runs/{testRun}', [TestRunController::class, 'destroy'])->middleware(['api.ability:test-runs:write', 'throttle:api-write']);
         Route::post('test-runs/{testRun}/start', [TestRunController::class, 'start'])->middleware(['api.ability:test-runs:write', 'throttle:api-write']);
         Route::patch('test-runs/{testRun}/case-results/{testCase}', [TestRunController::class, 'updateCaseResult'])->middleware(['api.ability:test-runs:write', 'throttle:api-write']);
+
+        Route::get('test-cases/{testCase}/automation', [AutomationController::class, 'show'])->middleware(['api.ability:automations:read', 'throttle:api-read']);
+        Route::post('test-cases/{testCase}/automation/generate', [AutomationController::class, 'generate'])->middleware(['api.ability:automations:write', 'throttle:api-write']);
+        Route::patch('test-cases/{testCase}/automation', [AutomationController::class, 'update'])->middleware(['api.ability:automations:write', 'throttle:api-write']);
+        Route::post('test-cases/{testCase}/automation/validate', [AutomationController::class, 'validateDefinition'])->middleware(['api.ability:automations:write', 'throttle:api-write']);
+        Route::post('test-cases/{testCase}/automation/approve', [AutomationController::class, 'approve'])->middleware(['api.ability:automations:write', 'throttle:api-write']);
+        Route::get('automation-runs/{automationRun}', [AutomationRunController::class, 'show'])->middleware(['api.ability:automations:read', 'throttle:api-read']);
+        Route::get('test-runs/{testRun}/automation-runs', [AutomationRunController::class, 'index'])->middleware(['api.ability:automations:read', 'throttle:api-read']);
+        Route::post('test-runs/{testRun}/automation-runs/retry', [AutomationRunController::class, 'retry'])->middleware(['api.ability:automations:write', 'throttle:api-write']);
+        Route::post('automation-executions/{execution}/issue-draft', [AutomationController::class, 'issueDraft'])->middleware(['api.ability:automations:write', 'throttle:api-write']);
 
         Route::get('issues', [IssueController::class, 'index'])->middleware(['api.ability:issues:read', 'throttle:api-read']);
         Route::get('issues/{issue}', [IssueController::class, 'show'])->middleware(['api.ability:issues:read', 'throttle:api-read']);

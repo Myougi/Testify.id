@@ -222,6 +222,46 @@ test('test plans page can lock the selected project from the query string', func
         ->where('initialPayload.options.selectedProjectId', $project->project_id));
 });
 
+test('test plans page only displays plans from the active project', function () {
+    $user = User::factory()->create();
+    $activeProject = Project::factory()->for($user)->create([
+        'project_name' => 'Visible project',
+    ]);
+    $otherProject = Project::factory()->for($user)->create([
+        'project_name' => 'Hidden project',
+    ]);
+    $visiblePlan = TestPlan::factory()->for($activeProject, 'project')->create([
+        'name' => 'Visible plan',
+    ]);
+    TestPlan::factory()->for($otherProject, 'project')->create([
+        'name' => 'Hidden plan',
+    ]);
+
+    $response = $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $activeProject->project_id])
+        ->get(route('test-plans.index'));
+
+    $response->assertOk();
+    $response->assertInertia(fn ($page) => $page
+        ->component('test-plans/Index')
+        ->has('initialPayload.data', 1)
+        ->where('initialPayload.data.0.id', $visiblePlan->id)
+        ->where('initialPayload.stats.totalPlans', 1)
+        ->where('initialPayload.options.selectedProjectId', $activeProject->project_id));
+});
+
+test('test plan detail rejects sibling-project plans while another project is active', function () {
+    $user = User::factory()->create();
+    $activeProject = Project::factory()->for($user)->create();
+    $otherProject = Project::factory()->for($user)->create();
+    $foreignPlan = TestPlan::factory()->for($otherProject, 'project')->create();
+
+    $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $activeProject->project_id])
+        ->get(route('test-plans.show', $foreignPlan))
+        ->assertNotFound();
+});
+
 test('users can list only test plans from their own projects', function () {
     $user = User::factory()->create();
     $project = Project::factory()->for($user)->create([
@@ -253,6 +293,23 @@ test('users can list only test plans from their own projects', function () {
     $response->assertJsonPath('data.0.tester', 'Sarah Chen');
     $response->assertJsonPath('stats.totalPlans', 1);
     $response->assertJsonPath('stats.completedPlans', 1);
+});
+
+test('test plan api only lists plans from the active project', function () {
+    $user = User::factory()->create();
+    $activeProject = Project::factory()->for($user)->create();
+    $otherProject = Project::factory()->for($user)->create();
+    $visiblePlan = TestPlan::factory()->for($activeProject, 'project')->create();
+    TestPlan::factory()->for($otherProject, 'project')->create();
+
+    $response = $this->actingAs($user)
+        ->withSession(['qa_workspace_project_id' => $activeProject->project_id])
+        ->getJson(route('api.test-plans.index'));
+
+    $response->assertOk();
+    $response->assertJsonCount(1, 'data');
+    $response->assertJsonPath('data.0.id', $visiblePlan->id);
+    $response->assertJsonPath('stats.totalPlans', 1);
 });
 
 test('users can filter test plans by status', function () {

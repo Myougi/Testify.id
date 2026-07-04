@@ -79,6 +79,24 @@ paths:
       $ref: '#/components/pathItems/ResourcePatch'
     delete:
       $ref: '#/components/pathItems/ResourceDelete'
+  /projects/{id}/automation-settings:
+    get:
+      summary: Get project automation environments and credential metadata
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          $ref: '#/components/responses/Resource'
+    patch:
+      summary: Update project automation environments and credential metadata
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/JsonApi'
+      responses:
+        '200':
+          $ref: '#/components/responses/Resource'
   /repository-modules:
     get:
       $ref: '#/components/pathItems/CollectionGet'
@@ -135,6 +153,44 @@ paths:
       $ref: '#/components/pathItems/ResourcePatch'
     delete:
       $ref: '#/components/pathItems/ResourceDelete'
+  /test-cases/{id}/automation:
+    get:
+      $ref: '#/components/pathItems/ResourceGet'
+    patch:
+      $ref: '#/components/pathItems/ResourcePatch'
+  /test-cases/{id}/automation/generate:
+    post:
+      summary: Generate a safe automation definition draft
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/JsonApi'
+      responses:
+        '201':
+          $ref: '#/components/responses/Resource'
+  /test-cases/{id}/automation/validate:
+    post:
+      summary: Dispatch non-production browser validation
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/JsonApi'
+      responses:
+        '202':
+          $ref: '#/components/responses/Resource'
+  /test-cases/{id}/automation/approve:
+    post:
+      summary: Approve a successfully validated automation definition
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/JsonApi'
+      responses:
+        '200':
+          $ref: '#/components/responses/Resource'
   /test-runs:
     get:
       $ref: '#/components/pathItems/CollectionGet'
@@ -153,6 +209,39 @@ paths:
   /test-runs/{id}/case-results/{testCase}:
     patch:
       $ref: '#/components/pathItems/ResourcePatch'
+  /test-runs/{id}/automation-runs:
+    get:
+      summary: List automation attempts for a test run
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          $ref: '#/components/responses/Collection'
+  /test-runs/{id}/automation-runs/retry:
+    post:
+      summary: Retry failed and blocked automated cases
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/JsonApi'
+      responses:
+        '202':
+          $ref: '#/components/responses/Resource'
+  /automation-runs/{id}:
+    get:
+      $ref: '#/components/pathItems/ResourceGet'
+  /automation-executions/{id}/issue-draft:
+    post:
+      summary: Generate a user-reviewable issue draft from a failed execution
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        $ref: '#/components/requestBodies/JsonApi'
+      responses:
+        '201':
+          $ref: '#/components/responses/Resource'
   /issues:
     get:
       $ref: '#/components/pathItems/CollectionGet'

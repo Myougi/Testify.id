@@ -6,23 +6,26 @@ use App\Models\Project;
 use App\Models\TestCase;
 use App\Models\TestRepositoryModule;
 use App\Models\User;
-use Illuminate\Database\Eloquent\Collection;
+use App\Services\Automation\AutomationDefinitionService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class TestRepositoryService
 {
+    public function __construct(private readonly AutomationDefinitionService $automationDefinitionService) {}
+
     /**
      * @param  array<string, mixed>  $filters
      * @return LengthAwarePaginator<int, TestCase>
      */
-    public function paginateCasesForUser(User $user, array $filters = []): LengthAwarePaginator
+    public function paginateCasesForUser(User $user, array $filters = [], ?int $activeProjectId = null): LengthAwarePaginator
     {
         $perPage = max(5, min(50, (int) ($filters['per_page'] ?? 10)));
 
-        return $this->applyCaseFilters($user, $this->caseQueryForUser($user), $filters)
+        return $this->applyCaseFilters($user, $this->caseQueryForUser($user, $activeProjectId), $filters, $activeProjectId)
             ->latest()
             ->paginate($perPage)
             ->withQueryString();
@@ -31,9 +34,9 @@ class TestRepositoryService
     /**
      * @return array<string, int>
      */
-    public function getStats(User $user): array
+    public function getStats(User $user, ?int $activeProjectId = null): array
     {
-        $query = $this->caseQueryForUser($user)->toBase();
+        $query = $this->caseQueryForUser($user, $activeProjectId)->toBase();
 
         return [
             'totalCases' => (clone $query)->count(),
@@ -70,15 +73,19 @@ class TestRepositoryService
     /**
      * @return array<int, TestRepositoryModule>
      */
-    public function getModulesForUser(User $user): array
+    public function getModulesForUser(User $user, ?int $activeProjectId = null): array
     {
-        return TestRepositoryModule::query()
+        $query = TestRepositoryModule::query()
             ->withCount(['children', 'testCases'])
             ->whereIn('project_id', $user->projects()->select('project_id'))
             ->orderBy('sort_order')
-            ->orderBy('name')
-            ->get()
-            ->all();
+            ->orderBy('name');
+
+        if ($activeProjectId !== null) {
+            $query->where('project_id', $activeProjectId);
+        }
+
+        return $query->get()->all();
     }
 
     /**
@@ -207,7 +214,10 @@ class TestRepositoryService
                 $testCase->increment('api_version');
             }
 
-            return $testCase->load(['project', 'module', 'steps']);
+            $testCase->load(['project', 'module', 'steps', 'automation']);
+            $this->automationDefinitionService->invalidateIfChanged($testCase);
+
+            return $testCase;
         });
     }
 
@@ -216,7 +226,7 @@ class TestRepositoryService
      * @param  array<string, mixed>  $filters
      * @return Builder<TestCase>
      */
-    private function applyCaseFilters(User $user, Builder $query, array $filters): Builder
+    private function applyCaseFilters(User $user, Builder $query, array $filters, ?int $activeProjectId = null): Builder
     {
         $search = trim((string) ($filters['search'] ?? ''));
         $moduleId = (int) ($filters['module_id'] ?? 0);
@@ -238,7 +248,7 @@ class TestRepositoryService
         }
 
         if ($moduleId > 0) {
-            $moduleIds = $this->moduleAndDescendantIds($user, $moduleId);
+            $moduleIds = $this->moduleAndDescendantIds($user, $moduleId, $activeProjectId);
 
             if ($moduleIds !== []) {
                 $query->whereIn('module_id', $moduleIds);
@@ -267,24 +277,35 @@ class TestRepositoryService
     /**
      * @return Builder<TestCase>
      */
-    private function caseQueryForUser(User $user): Builder
+    private function caseQueryForUser(User $user, ?int $activeProjectId = null): Builder
     {
-        return TestCase::query()
+        $query = TestCase::query()
             ->with([
                 'module:id,project_id,parent_id,name,key_prefix',
                 'project:project_id,project_name,user_id',
             ])
             ->whereIn('project_id', $user->projects()->select('project_id'));
+
+        if ($activeProjectId !== null) {
+            $query->where('project_id', $activeProjectId);
+        }
+
+        return $query;
     }
 
     /**
      * @return array<int, int>
      */
-    private function moduleAndDescendantIds(User $user, int $moduleId): array
+    private function moduleAndDescendantIds(User $user, int $moduleId, ?int $activeProjectId = null): array
     {
-        $modules = TestRepositoryModule::query()
-            ->whereIn('project_id', $user->projects()->select('project_id'))
-            ->get(['id', 'parent_id']);
+        $modulesQuery = TestRepositoryModule::query()
+            ->whereIn('project_id', $user->projects()->select('project_id'));
+
+        if ($activeProjectId !== null) {
+            $modulesQuery->where('project_id', $activeProjectId);
+        }
+
+        $modules = $modulesQuery->get(['id', 'parent_id']);
 
         if (! $modules->contains('id', $moduleId)) {
             return [];

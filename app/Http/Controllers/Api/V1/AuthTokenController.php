@@ -20,6 +20,7 @@ class AuthTokenController extends Controller
         'test-plans:read', 'test-plans:write',
         'test-cases:read', 'test-cases:write',
         'test-runs:read', 'test-runs:write',
+        'automations:read', 'automations:write',
         'issues:read', 'issues:write',
         'profile:read', 'profile:write',
         'tokens:read', 'tokens:write',
