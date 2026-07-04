@@ -30,6 +30,8 @@ class AutomationArtifact extends Model
 
     public const TYPE_LOG = 'Log';
 
+    public const TYPE_DIAGNOSTIC = 'Diagnostic';
+
     /** @use HasFactory<AutomationArtifactFactory> */
     use HasFactory;
 

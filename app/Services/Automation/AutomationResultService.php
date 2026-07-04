@@ -27,6 +27,7 @@ class AutomationResultService
 
     public function __construct(
         private readonly AutomationDefinitionService $definitions,
+        private readonly AutomationHealingService $healing,
         private readonly TestRunService $testRuns,
     ) {}
 
@@ -51,6 +52,7 @@ class AutomationResultService
             'environment' => $run->environment,
             'base_url' => $run->base_url,
             'case_timeout_seconds' => (int) config('automation.limits.case_timeout_seconds', 120),
+            'diagnostic_max_characters' => (int) config('automation.ai_healing.diagnostic_max_characters', 20000),
             'credential_profiles' => $profiles,
             'executions' => $run->executions->map(fn (AutomationExecution $execution): array => [
                 'id' => $execution->id,
@@ -116,6 +118,7 @@ class AutomationResultService
                 'status' => $status,
                 'duration_ms' => isset($result['duration_ms']) ? max(0, (int) $result['duration_ms']) : null,
                 'failure_type' => $this->nullableString($result['failure_type'] ?? null, 40),
+                'failure_code' => $this->nullableString($result['failure_code'] ?? null, 60),
                 'failure_message' => $this->nullableString($result['failure_message'] ?? null, 10000),
                 'failed_step' => isset($result['failed_step']) ? max(1, (int) $result['failed_step']) : null,
                 'console_excerpt' => $this->nullableString(
@@ -135,6 +138,15 @@ class AutomationResultService
                     $status === AutomationExecution::STATUS_PASSED,
                     $execution->failure_message ?? 'Browser validation passed.',
                 );
+
+                $isHealingRevalidation = $this->healing->completeRevalidation(
+                    $run,
+                    $status === AutomationExecution::STATUS_PASSED,
+                );
+
+                if (! $isHealingRevalidation && $status !== AutomationExecution::STATUS_PASSED) {
+                    $this->healing->queueIfEligible($execution->fresh(['artifacts', 'automationRun', 'automation.testCase.steps']));
+                }
             }
 
             if ($run->kind === AutomationRun::KIND_EXECUTION && $run->testRun) {
@@ -161,7 +173,12 @@ class AutomationResultService
      */
     public function reserveArtifact(AutomationExecution $execution, array $data): array
     {
-        $types = [AutomationArtifact::TYPE_SCREENSHOT, AutomationArtifact::TYPE_TRACE, AutomationArtifact::TYPE_LOG];
+        $types = [
+            AutomationArtifact::TYPE_SCREENSHOT,
+            AutomationArtifact::TYPE_TRACE,
+            AutomationArtifact::TYPE_LOG,
+            AutomationArtifact::TYPE_DIAGNOSTIC,
+        ];
         $mimes = config('automation.artifacts.allowed_mime_types', []);
         $maxBytes = (int) config('automation.limits.artifact_size_kilobytes', 15360) * 1024;
 

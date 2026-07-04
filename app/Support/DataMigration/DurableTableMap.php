@@ -24,6 +24,7 @@ final class DurableTableMap
             ['table' => 'test_case_test_run', 'primary_key' => 'id', 'sequence_column' => 'id'],
             ['table' => 'automation_runs', 'primary_key' => 'id', 'sequence_column' => null],
             ['table' => 'automation_executions', 'primary_key' => 'id', 'sequence_column' => null],
+            ['table' => 'automation_healing_attempts', 'primary_key' => 'id', 'sequence_column' => null],
             ['table' => 'automation_artifacts', 'primary_key' => 'id', 'sequence_column' => 'id'],
             ['table' => 'issues', 'primary_key' => 'id', 'sequence_column' => 'id'],
             ['table' => 'issue_attachments', 'primary_key' => 'id', 'sequence_column' => 'id'],

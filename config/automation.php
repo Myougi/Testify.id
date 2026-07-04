@@ -3,6 +3,12 @@
 return [
     'enabled' => (bool) env('AUTOMATION_ENABLED', false),
 
+    'ai_healing' => [
+        'enabled' => (bool) env('AUTOMATION_AI_HEALING_ENABLED', false),
+        'max_attempts' => (int) env('AUTOMATION_MAX_AUTO_HEAL_ATTEMPTS', 1),
+        'diagnostic_max_characters' => (int) env('AUTOMATION_DIAGNOSTIC_MAX_CHARACTERS', 20000),
+    ],
+
     'github' => [
         'owner' => env('AUTOMATION_GITHUB_OWNER'),
         'repository' => env('AUTOMATION_GITHUB_REPOSITORY'),

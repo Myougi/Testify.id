@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\AutomationExecution;
+use App\Models\AutomationHealingAttempt;
 use App\Models\Project;
 use App\Models\TestCase;
 use App\Models\TestCaseAutomation;
@@ -78,6 +79,27 @@ class AutomationController extends Controller
     public function show(Request $request, string $testCase): JsonResponse
     {
         return $this->resource($this->testCase($request, $testCase)->automation()->firstOrFail());
+    }
+
+    public function healingHistory(Request $request, string $testCase): JsonResponse
+    {
+        $automation = $this->testCase($request, $testCase)->automation()->firstOrFail();
+        $attempts = $automation->healingAttempts()
+            ->latest()
+            ->cursorPaginate(JsonApi::pageSize($request));
+
+        return JsonApi::collection($attempts, $attempts->map(fn (AutomationHealingAttempt $attempt): array => [
+            'type' => 'automation-healing-attempts',
+            'id' => $attempt->id,
+            'attributes' => $this->healingAttributes($attempt),
+            'relationships' => [
+                'automation' => ['data' => ['type' => 'test-case-automations', 'id' => (string) $automation->id]],
+                'source_execution' => ['data' => ['type' => 'automation-executions', 'id' => $attempt->source_execution_id]],
+                'revalidation_run' => ['data' => $attempt->revalidation_run_id
+                    ? ['type' => 'automation-runs', 'id' => $attempt->revalidation_run_id]
+                    : null],
+            ],
+        ])->all());
     }
 
     public function generate(Request $request, string $testCase): JsonResponse
@@ -219,12 +241,30 @@ class AutomationController extends Controller
                 'last_validated_environment' => $automation->last_validated_environment,
                 'last_validated_at' => $automation->last_validated_at?->utc()->toIso8601String(),
                 'validation_summary' => $automation->validation_summary,
+                'approval_source' => $automation->approval_source,
                 'approved_at' => $automation->approved_at?->utc()->toIso8601String(),
+                'last_healed_at' => $automation->last_healed_at?->utc()->toIso8601String(),
             ],
             'relationships' => [
                 'test_case' => ['data' => ['type' => 'test-cases', 'id' => (string) $automation->test_case_id]],
             ],
             'meta' => ['etag' => JsonApi::etag($automation)],
         ], $status, meta: $meta, etag: JsonApi::etag($automation));
+    }
+
+    /** @return array<string, mixed> */
+    private function healingAttributes(AutomationHealingAttempt $attempt): array
+    {
+        return [
+            'status' => $attempt->status,
+            'failed_step' => $attempt->failed_step,
+            'original_definition' => $attempt->original_definition,
+            'proposed_definition' => $attempt->proposed_definition,
+            'rationale' => $attempt->rationale,
+            'confidence' => $attempt->confidence,
+            'failure_message' => $attempt->failure_message,
+            'created_at' => $attempt->created_at?->utc()->toIso8601String(),
+            'completed_at' => $attempt->completed_at?->utc()->toIso8601String(),
+        ];
     }
 }

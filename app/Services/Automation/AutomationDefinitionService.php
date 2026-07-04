@@ -9,13 +9,17 @@ use App\Models\TestCaseAutomation;
 use App\Models\TestRun;
 use App\Models\User;
 use App\Support\Automation\AutomationDefinitionValidator;
+use App\Support\Automation\AutomationStepCompiler;
 use Illuminate\Validation\ValidationException;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use RuntimeException;
 
 class AutomationDefinitionService
 {
-    public function __construct(private readonly AutomationDefinitionValidator $validator) {}
+    public function __construct(
+        private readonly AutomationDefinitionValidator $validator,
+        private readonly AutomationStepCompiler $compiler,
+    ) {}
 
     /**
      * @return array{automation: TestCaseAutomation, warnings: list<string>}
@@ -24,7 +28,7 @@ class AutomationDefinitionService
     {
         $testCase->loadMissing(['project.credentialProfiles', 'module', 'steps']);
         $profiles = $this->credentialProfiles($testCase);
-        $response = AutomationDefinitionAgent::make(context: [
+        $context = [
             'case_key' => $testCase->case_key,
             'title' => $testCase->title,
             'preconditions' => $testCase->preconditions,
@@ -35,14 +39,26 @@ class AutomationDefinitionService
                 'expected_result' => $step->expected_result,
             ])->all(),
             'credential_profiles' => $profiles,
-        ])->prompt('Generate a safe browser automation definition for this test case.');
+        ];
+        $structured = $this->generateStructured($context);
 
-        if (! $response instanceof StructuredAgentResponse) {
-            throw new RuntimeException('The automation agent did not return structured output.');
+        try {
+            $definition = $this->compileAndValidate(
+                is_array($structured['definition'] ?? null) ? $structured['definition'] : [],
+                $profiles,
+            );
+        } catch (ValidationException $exception) {
+            $structured = $this->generateStructured([
+                ...$context,
+                'previous_output' => $structured['definition'] ?? null,
+                'correction_errors' => $exception->errors(),
+            ], 'Correct the previous output using every compiler error. Return a complete replacement definition.');
+            $definition = $this->compileAndValidate(
+                is_array($structured['definition'] ?? null) ? $structured['definition'] : [],
+                $profiles,
+            );
         }
 
-        $structured = $response->structured;
-        $definition = is_array($structured['definition'] ?? null) ? $structured['definition'] : [];
         $automation = $this->save($testCase, $definition, generated: true);
         $warnings = [];
 
@@ -57,13 +73,25 @@ class AutomationDefinitionService
         return ['automation' => $automation, 'warnings' => $warnings];
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @return array<string, mixed>
+     */
+    private function generateStructured(array $context, string $prompt = 'Generate a safe browser automation definition for this test case.'): array
+    {
+        $response = AutomationDefinitionAgent::make(context: $context)->prompt($prompt);
+
+        if (! $response instanceof StructuredAgentResponse) {
+            throw new RuntimeException('The automation agent did not return structured output.');
+        }
+
+        return $response->structured;
+    }
+
     /** @param array<string, mixed> $definition */
     public function save(TestCase $testCase, array $definition, bool $generated = false): TestCaseAutomation
     {
-        $validated = $this->validator->validate(
-            $this->stripNullValues($definition),
-            $this->credentialProfiles($testCase),
-        );
+        $validated = $this->validateDefinition($testCase, $definition);
 
         return TestCaseAutomation::query()->updateOrCreate(
             ['test_case_id' => $testCase->id],
@@ -78,6 +106,7 @@ class AutomationDefinitionService
                 'last_validated_at' => null,
                 'validation_summary' => null,
                 'approved_by' => null,
+                'approval_source' => null,
                 'approved_at' => null,
             ],
         )->fresh(['approver']);
@@ -104,6 +133,7 @@ class AutomationDefinitionService
         $automation->forceFill([
             'status' => TestCaseAutomation::STATUS_READY,
             'approved_by' => $user->id,
+            'approval_source' => TestCaseAutomation::APPROVAL_USER,
             'approved_at' => now(),
         ])->save();
 
@@ -127,6 +157,7 @@ class AutomationDefinitionService
             'last_validated_at' => $passed && $isCurrent ? now() : null,
             'validation_summary' => $summary,
             'approved_by' => null,
+            'approval_source' => null,
             'approved_at' => null,
         ])->save();
     }
@@ -145,6 +176,7 @@ class AutomationDefinitionService
             'last_validated_at' => null,
             'validation_summary' => 'The test case changed. Validate this definition again.',
             'approved_by' => null,
+            'approval_source' => null,
             'approved_at' => null,
         ])->save();
     }
@@ -163,12 +195,30 @@ class AutomationDefinitionService
     public function validateForEnvironment(TestCaseAutomation $automation, string $environment): array
     {
         $automation->loadMissing('testCase');
-        $definition = $automation->definition ?? [];
 
-        return $this->validator->validate(
-            $definition,
-            $this->credentialProfiles($automation->testCase, $environment),
+        return $this->validateDefinition(
+            $automation->testCase,
+            is_array($automation->definition) ? $automation->definition : [],
+            $environment,
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $definition
+     * @return array{version: int, steps: list<array<string, mixed>>}
+     */
+    public function validateDefinition(TestCase $testCase, array $definition, ?string $environment = null): array
+    {
+        return $this->validator->validate(
+            $this->stripNullValues($definition),
+            $this->credentialProfiles($testCase, $environment),
+        );
+    }
+
+    /** @return array<string, mixed> */
+    public function compileStep(mixed $step, int $index): array
+    {
+        return $this->compiler->compileStep($step, $index);
     }
 
     public function sourceHash(TestCase $testCase): string
@@ -186,6 +236,18 @@ class AutomationDefinitionService
         ];
 
         return hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * @param  array<string, mixed>  $definition
+     * @param  array<string, list<string>>  $credentialProfiles
+     * @return array{version: int, steps: list<array<string, mixed>>}
+     */
+    private function compileAndValidate(array $definition, array $credentialProfiles): array
+    {
+        $compiled = $this->compiler->compileDefinition($definition);
+
+        return $this->validator->validate($compiled, $credentialProfiles);
     }
 
     /** @return array<string, list<string>> */

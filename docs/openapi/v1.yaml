@@ -158,6 +158,16 @@ paths:
       $ref: '#/components/pathItems/ResourceGet'
     patch:
       $ref: '#/components/pathItems/ResourcePatch'
+  /test-cases/{id}/automation/healing-attempts:
+    get:
+      summary: List AI healing attempts for a Test Case automation definition
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/PageCursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          $ref: '#/components/responses/Collection'
   /test-cases/{id}/automation/generate:
     post:
       summary: Generate a safe automation definition draft
@@ -289,6 +299,18 @@ components:
       schema:
         type: string
         maxLength: 255
+    PageCursor:
+      name: page[cursor]
+      in: query
+      schema:
+        type: string
+    PageSize:
+      name: page[size]
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
   requestBodies:
     JsonApi:
       required: true

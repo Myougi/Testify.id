@@ -49,6 +49,7 @@ export interface RunnerPayload {
     environment: string;
     base_url: string;
     case_timeout_seconds: number;
+    diagnostic_max_characters: number;
     credential_profiles: CredentialProfileMetadata[];
     executions: RunnerExecution[];
 }
@@ -59,6 +60,14 @@ export interface ExecutionResult {
     status: 'Passed' | 'Failed' | 'Blocked' | 'Skipped';
     duration_ms: number;
     failure_type?: string;
+    failure_code?:
+        | 'locator_not_found'
+        | 'locator_ambiguous'
+        | 'assertion_failed'
+        | 'navigation_failed'
+        | 'step_timeout'
+        | 'credential_error'
+        | 'infrastructure_error';
     failure_message?: string;
     failed_step?: number;
     console_excerpt?: string;

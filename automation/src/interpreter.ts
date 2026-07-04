@@ -16,6 +16,17 @@ export class AssertionFailure extends Error {
     }
 }
 
+export class StepExecutionFailure extends Error {
+    public constructor(
+        message: string,
+        public readonly stepNumber: number,
+        public readonly action: AutomationStep['action'],
+        public readonly cause: unknown,
+    ) {
+        super(message);
+    }
+}
+
 export async function executeDefinition(
     page: Page,
     definition: AutomationDefinition,
@@ -23,8 +34,21 @@ export async function executeDefinition(
     credentials: CredentialValues,
 ): Promise<void> {
     for (const [index, step] of definition.steps.entries()) {
-        await executeStep(page, step, baseUrl, credentials, index + 1);
-        assertSameOrigin(page.url(), baseUrl, index + 1);
+        try {
+            await executeStep(page, step, baseUrl, credentials, index + 1);
+            assertSameOrigin(page.url(), baseUrl, index + 1);
+        } catch (error) {
+            if (error instanceof AssertionFailure) {
+                throw error;
+            }
+
+            throw new StepExecutionFailure(
+                `Step ${index + 1} (${step.action}) failed: ${error instanceof Error ? error.message : String(error)}`,
+                index + 1,
+                step.action,
+                error,
+            );
+        }
     }
 }
 

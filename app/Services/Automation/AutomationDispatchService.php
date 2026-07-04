@@ -112,6 +112,7 @@ class AutomationDispatchService
         $automation->forceFill([
             'status' => TestCaseAutomation::STATUS_VALIDATING,
             'approved_by' => null,
+            'approval_source' => null,
             'approved_at' => null,
         ])->save();
 

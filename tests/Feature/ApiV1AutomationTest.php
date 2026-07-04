@@ -1,5 +1,8 @@
 <?php
 
+use App\Models\AutomationExecution;
+use App\Models\AutomationHealingAttempt;
+use App\Models\AutomationRun;
 use App\Models\Project;
 use App\Models\TestCase;
 use App\Models\TestRepositoryModule;
@@ -7,7 +10,9 @@ use App\Models\TestRun;
 use App\Models\User;
 use App\Services\Automation\AutomationDefinitionService;
 use App\Support\Api\V1\JsonApi;
+use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
+use Tests\TestCase as FeatureTestCase;
 
 const AUTOMATION_JSON_API = 'application/vnd.api+json';
 
@@ -20,36 +25,55 @@ test('api v1 automation resources enforce abilities ownership and etags', functi
     $case = TestCase::factory()->for($project, 'project')->for($module, 'module')->create([
         'automation_status' => TestCase::AUTOMATION_AUTOMATED,
     ]);
-    app(AutomationDefinitionService::class)->save($case, [
+    $automation = app(AutomationDefinitionService::class)->save($case, [
         'version' => 1,
         'steps' => [['action' => 'navigate', 'path' => '/']],
     ]);
+    $sourceRun = AutomationRun::factory()->for($user, 'requester')->create();
+    $sourceExecution = AutomationExecution::factory()
+        ->for($sourceRun, 'automationRun')
+        ->for($case)
+        ->for($automation, 'automation')
+        ->create();
+    AutomationHealingAttempt::factory()
+        ->for($automation, 'automation')
+        ->for($sourceExecution, 'sourceExecution')
+        ->create([
+            'source_hash' => $automation->source_hash,
+            'status' => AutomationHealingAttempt::STATUS_FAILED,
+        ]);
     Sanctum::actingAs($user, ['automations:read']);
 
-    $this->getJson("/api/v1/projects/{$project->project_id}/automation-settings", [
+    apiGetJson($this, "/api/v1/projects/{$project->project_id}/automation-settings", [
         'Accept' => AUTOMATION_JSON_API,
     ])->assertOk()
         ->assertHeader('ETag')
         ->assertJsonPath('data.type', 'project-automation-settings');
 
-    $this->getJson("/api/v1/test-cases/{$case->id}/automation", [
+    apiGetJson($this, "/api/v1/test-cases/{$case->id}/automation", [
         'Accept' => AUTOMATION_JSON_API,
     ])->assertOk()
         ->assertJsonPath('data.attributes.status', 'Draft');
 
-    $this->getJson("/api/v1/projects/{$foreignProject->project_id}/automation-settings", [
+    apiGetJson($this, "/api/v1/test-cases/{$case->id}/automation/healing-attempts", [
+        'Accept' => AUTOMATION_JSON_API,
+    ])->assertOk()
+        ->assertJsonPath('data.0.type', 'automation-healing-attempts')
+        ->assertJsonPath('data.0.attributes.status', AutomationHealingAttempt::STATUS_FAILED);
+
+    apiGetJson($this, "/api/v1/projects/{$foreignProject->project_id}/automation-settings", [
         'Accept' => AUTOMATION_JSON_API,
     ])->assertNotFound();
 
     $payload = automationSettingsPayload();
-    $this->json('PATCH', "/api/v1/projects/{$project->project_id}/automation-settings", $payload, [
+    apiJson($this, 'PATCH', "/api/v1/projects/{$project->project_id}/automation-settings", $payload, [
         'Accept' => AUTOMATION_JSON_API,
         'Content-Type' => AUTOMATION_JSON_API,
         'If-Match' => JsonApi::etag($project),
     ])->assertForbidden();
 
     Sanctum::actingAs($user, ['automations:read', 'automations:write']);
-    $this->json('PATCH', "/api/v1/projects/{$project->project_id}/automation-settings", $payload, [
+    apiJson($this, 'PATCH', "/api/v1/projects/{$project->project_id}/automation-settings", $payload, [
         'Accept' => AUTOMATION_JSON_API,
         'Content-Type' => AUTOMATION_JSON_API,
         'If-Match' => JsonApi::etag($project),
@@ -79,4 +103,18 @@ function automationSettingsPayload(): array
             ],
         ],
     ];
+}
+
+function apiGetJson(FeatureTestCase $testCase, string $uri, array $headers = []): TestResponse
+{
+    return $testCase->getJson($uri, $headers);
+}
+
+/**
+ * @param  array<string, mixed>  $data
+ * @param  array<string, string>  $headers
+ */
+function apiJson(FeatureTestCase $testCase, string $method, string $uri, array $data = [], array $headers = []): TestResponse
+{
+    return $testCase->json($method, $uri, $data, $headers);
 }

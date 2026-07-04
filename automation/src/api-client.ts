@@ -55,7 +55,7 @@ export class RunnerApiClient {
     public async uploadArtifact(
         runId: string,
         executionId: string,
-        type: 'Screenshot' | 'Trace' | 'Log',
+        type: 'Screenshot' | 'Trace' | 'Log' | 'Diagnostic',
         path: string,
         mimeType: string,
     ): Promise<void> {

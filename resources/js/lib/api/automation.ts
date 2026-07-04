@@ -32,7 +32,7 @@ export type TestCaseAutomation = {
     id: number;
     driver: string;
     schema_version: number;
-    status: 'Draft' | 'Validating' | 'Ready' | 'Invalid';
+    status: 'Draft' | 'Validating' | 'Healing' | 'Ready' | 'Invalid';
     definition: AutomationDefinition;
     source_hash: string;
     generated_at: string | null;
@@ -40,7 +40,25 @@ export type TestCaseAutomation = {
     last_validated_at: string | null;
     validation_summary: string | null;
     approved_by: string | null;
+    approval_source: 'User' | 'AI Healed' | null;
     approved_at: string | null;
+    last_healed_at: string | null;
+    healing_history: AutomationHealingAttempt[];
+};
+
+export type AutomationHealingAttempt = {
+    id: string;
+    status: 'Healing' | 'Validating' | 'Applied' | 'Failed' | 'Cancelled';
+    failed_step: number;
+    original_definition: AutomationDefinition;
+    proposed_definition: AutomationDefinition | null;
+    rationale: string | null;
+    confidence: number | null;
+    failure_message: string | null;
+    source_execution_id: string;
+    revalidation_run_id: string | null;
+    created_at: string | null;
+    completed_at: string | null;
 };
 
 export type AutomationCasePayload = {
@@ -52,7 +70,7 @@ export type AutomationCasePayload = {
 
 export type AutomationArtifact = {
     id: number;
-    type: 'Screenshot' | 'Trace' | 'Log';
+    type: 'Screenshot' | 'Trace' | 'Log' | 'Diagnostic';
     name: string;
 };
 
@@ -63,6 +81,7 @@ export type AutomationExecution = {
     status: 'Queued' | 'Running' | 'Passed' | 'Failed' | 'Blocked' | 'Skipped';
     duration_ms: number | null;
     failure_type: string | null;
+    failure_code: string | null;
     failure_message: string | null;
     failed_step: number | null;
     artifacts: AutomationArtifact[];

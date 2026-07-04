@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AutomationArtifact;
 use App\Models\AutomationExecution;
+use App\Models\AutomationHealingAttempt;
 use App\Models\AutomationRun;
 use App\Models\Project;
 use App\Models\TestCase;
@@ -58,6 +59,20 @@ class AutomationController extends Controller
     public function show(Request $request, string $testCase): JsonResponse
     {
         return response()->json(['data' => $this->automationPayload($this->testCase($request, $testCase))]);
+    }
+
+    public function healingHistory(Request $request, string $testCase): JsonResponse
+    {
+        $case = $this->testCase($request, $testCase);
+        $attempts = $case->automation?->healingAttempts()
+            ->with(['sourceExecution', 'revalidationRun'])
+            ->latest()
+            ->limit(50)
+            ->get() ?? collect();
+
+        return response()->json(['data' => $attempts->map(
+            fn (AutomationHealingAttempt $attempt): array => $this->healingPayload($attempt),
+        )->values()->all()]);
     }
 
     public function generate(Request $request, string $testCase): JsonResponse
@@ -185,7 +200,13 @@ class AutomationController extends Controller
     /** @return array<string, mixed> */
     private function automationPayload(TestCase $testCase): array
     {
-        $testCase->loadMissing(['automation.approver', 'project.environments', 'project.credentialProfiles']);
+        $testCase->loadMissing([
+            'automation.approver',
+            'automation.healingAttempts.sourceExecution',
+            'automation.healingAttempts.revalidationRun',
+            'project.environments',
+            'project.credentialProfiles',
+        ]);
         $automation = $testCase->automation;
 
         return [
@@ -203,7 +224,14 @@ class AutomationController extends Controller
                 'last_validated_at' => $automation->last_validated_at?->toIso8601String(),
                 'validation_summary' => $automation->validation_summary,
                 'approved_by' => $automation->approver?->name,
+                'approval_source' => $automation->approval_source,
                 'approved_at' => $automation->approved_at?->toIso8601String(),
+                'last_healed_at' => $automation->last_healed_at?->toIso8601String(),
+                'healing_history' => $automation->healingAttempts
+                    ->sortByDesc('created_at')
+                    ->take(10)
+                    ->map(fn (AutomationHealingAttempt $attempt): array => $this->healingPayload($attempt))
+                    ->values()->all(),
             ] : null,
             'settings' => $this->settings->payload($testCase->project),
         ];
@@ -231,6 +259,7 @@ class AutomationController extends Controller
                 'status' => $execution->status,
                 'duration_ms' => $execution->duration_ms,
                 'failure_type' => $execution->failure_type,
+                'failure_code' => $execution->failure_code,
                 'failure_message' => $execution->failure_message,
                 'failed_step' => $execution->failed_step,
                 'artifacts' => $execution->artifacts
@@ -241,6 +270,25 @@ class AutomationController extends Controller
                         'name' => $artifact->original_name,
                     ])->values()->all(),
             ])->all(),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function healingPayload(AutomationHealingAttempt $attempt): array
+    {
+        return [
+            'id' => $attempt->id,
+            'status' => $attempt->status,
+            'failed_step' => $attempt->failed_step,
+            'original_definition' => $attempt->original_definition,
+            'proposed_definition' => $attempt->proposed_definition,
+            'rationale' => $attempt->rationale,
+            'confidence' => $attempt->confidence,
+            'failure_message' => $attempt->failure_message,
+            'source_execution_id' => $attempt->source_execution_id,
+            'revalidation_run_id' => $attempt->revalidation_run_id,
+            'created_at' => $attempt->created_at?->toIso8601String(),
+            'completed_at' => $attempt->completed_at?->toIso8601String(),
         ];
     }
 }

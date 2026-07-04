@@ -63,6 +63,15 @@ class AutomationRunController extends Controller
             ])],
             'duration_ms' => ['nullable', 'integer', 'min:0'],
             'failure_type' => ['nullable', 'string', 'max:40'],
+            'failure_code' => ['nullable', 'string', Rule::in([
+                'locator_not_found',
+                'locator_ambiguous',
+                'assertion_failed',
+                'navigation_failed',
+                'step_timeout',
+                'credential_error',
+                'infrastructure_error',
+            ])],
             'failure_message' => ['nullable', 'string', 'max:10000'],
             'failed_step' => ['nullable', 'integer', 'min:1', 'max:100'],
             'console_excerpt' => ['nullable', 'string', 'max:12000'],
@@ -87,7 +96,7 @@ class AutomationRunController extends Controller
     public function reserveArtifact(Request $request, string $automationRun, string $execution): JsonResponse
     {
         $validated = $request->validate([
-            'type' => ['required', 'string', Rule::in(['Screenshot', 'Trace', 'Log'])],
+            'type' => ['required', 'string', Rule::in(['Screenshot', 'Trace', 'Log', 'Diagnostic'])],
             'original_name' => ['required', 'string', 'max:255'],
             'mime_type' => ['required', 'string', 'max:100'],
             'size' => ['required', 'integer', 'min:1'],

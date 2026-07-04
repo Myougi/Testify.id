@@ -10,10 +10,13 @@ use App\Models\TestRepositoryModule;
 use App\Models\TestRun;
 use App\Models\User;
 use App\Services\Automation\AutomationResultService;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use Tests\TestCase as FeatureTestCase;
 
 beforeEach(function (): void {
     config()->set('automation.runner.shared_secret', 'runner-secret');
@@ -39,7 +42,7 @@ test('runner rejects expired signatures and replayed request identifiers', funct
     $body = '{}';
     $requestId = (string) Str::uuid();
 
-    signedRunnerPost($this, $path, $body, 'expired', $requestId, now()->subMinutes(10)->timestamp)
+    signedRunnerPost($this, $path, $body, 'expired', $requestId, now()->subMinutes(10)->getTimestamp())
         ->assertUnauthorized();
 
     signedRunnerPost($this, $path, $body, 'replay', $requestId)->assertOk();
@@ -56,13 +59,20 @@ test('runner result callbacks map automation status to the test run case result'
         'status' => AutomationExecution::STATUS_FAILED,
         'duration_ms' => 1200,
         'failure_type' => 'assertion',
+        'failure_code' => 'assertion_failed',
         'failure_message' => 'Expected heading was not visible.',
         'failed_step' => 2,
     ], JSON_THROW_ON_ERROR);
     signedRunnerPost($this, $resultPath, $body, 'result-failed')->assertOk();
 
-    expect($testRun->testCases()->whereKey($case->id)->firstOrFail()->pivot->execution_status)
+    $executionStatus = DB::table('test_case_test_run')
+        ->where('test_run_id', $testRun->id)
+        ->where('test_case_id', $case->id)
+        ->value('execution_status');
+
+    expect($executionStatus)
         ->toBe(TestRun::CASE_STATUS_FAILED)
+        ->and($execution->fresh()->failure_code)->toBe('assertion_failed')
         ->and($run->fresh()->status)->toBe(AutomationRun::STATUS_FAILED);
 });
 
@@ -111,15 +121,18 @@ function runnerCallbackFixture(): array
     return [$run, $execution, $testRun, $case];
 }
 
+/**
+ * @return TestResponse<Response>
+ */
 function signedRunnerPost(
-    object $testCase,
+    FeatureTestCase $testCase,
     string $path,
     string $body,
     ?string $idempotencyKey,
     ?string $requestId = null,
     ?int $timestamp = null,
 ): TestResponse {
-    $timestamp ??= now()->timestamp;
+    $timestamp ??= now()->getTimestamp();
     $requestId ??= (string) Str::uuid();
     $canonical = implode("\n", [
         (string) $timestamp,

@@ -39,14 +39,16 @@
     let warnings = $state<string[]>([]);
     let errors = $state<Record<string, string>>({});
 
-    const validationEnvironments = (): AutomationCasePayload['settings']['environments'] =>
-        payload?.settings.environments ?? [];
+    const validationEnvironments =
+        (): AutomationCasePayload['settings']['environments'] =>
+            payload?.settings.environments ?? [];
 
     const selectedValidationEnvironment = ():
         | AutomationCasePayload['settings']['environments'][number]
         | null =>
-        validationEnvironments().find((item) => item.environment === environment) ??
-        null;
+        validationEnvironments().find(
+            (item) => item.environment === environment,
+        ) ?? null;
 
     const canValidateSelectedEnvironment = (): boolean => {
         const selected = selectedValidationEnvironment();
@@ -81,6 +83,23 @@
         return null;
     };
 
+    const definitionStep = (
+        definition: AutomationDefinition | null,
+        stepNumber: number,
+    ): Record<string, unknown> | null =>
+        definition?.steps[stepNumber - 1] ?? null;
+
+    const statusLabel = (): string => {
+        if (!payload?.automation) {
+            return '';
+        }
+
+        return payload.automation.status === 'Ready' &&
+            payload.automation.approval_source === 'AI Healed'
+            ? 'Ready · AI Healed'
+            : payload.automation.status;
+    };
+
     const hydrate = (next: AutomationCasePayload): void => {
         payload = next;
         definitionText = next.automation?.definition
@@ -95,7 +114,8 @@
             return;
         }
 
-        const lastValidatedEnvironment = next.automation?.last_validated_environment
+        const lastValidatedEnvironment = next.automation
+            ?.last_validated_environment
             ? next.settings.environments.find(
                   (candidate) =>
                       candidate.environment ===
@@ -221,7 +241,10 @@
     onMount(() => {
         void load();
         const timer = window.setInterval(() => {
-            if (payload?.automation?.status === 'Validating') {
+            if (
+                payload?.automation?.status === 'Validating' ||
+                payload?.automation?.status === 'Healing'
+            ) {
                 void load(true);
             }
         }, 5000);
@@ -252,7 +275,7 @@
             <span
                 class="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-[#002b57]"
             >
-                {payload.automation.status}
+                {statusLabel()}
             </span>
         {/if}
     </div>
@@ -302,6 +325,87 @@
                 >
                     {payload.automation.validation_summary}
                 </p>
+            {/if}
+
+            {#if payload.automation?.healing_history.length}
+                <section
+                    id="automation-healing-history"
+                    class="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"
+                >
+                    <div>
+                        <h3 class="text-sm font-bold text-[#071a2f]">
+                            AI healing history
+                        </h3>
+                        <p class="mt-1 text-xs text-slate-600">
+                            Every automatic replacement and revalidation result
+                            is preserved here.
+                        </p>
+                    </div>
+                    {#each payload.automation.healing_history as attempt (attempt.id)}
+                        <article
+                            class="grid gap-3 rounded-xl border border-slate-200 bg-white p-4"
+                        >
+                            <div
+                                class="flex flex-wrap items-center justify-between gap-2"
+                            >
+                                <p class="text-sm font-semibold text-[#071a2f]">
+                                    Step {attempt.failed_step} · {attempt.status}
+                                </p>
+                                {#if attempt.confidence !== null}
+                                    <span
+                                        class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700"
+                                    >
+                                        {attempt.confidence}% confidence
+                                    </span>
+                                {/if}
+                            </div>
+                            {#if attempt.rationale}
+                                <p class="text-sm text-slate-700">
+                                    {attempt.rationale}
+                                </p>
+                            {/if}
+                            <div class="grid gap-3 lg:grid-cols-2">
+                                <div class="min-w-0">
+                                    <p
+                                        class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                                    >
+                                        Original step
+                                    </p>
+                                    <pre
+                                        class="max-h-56 overflow-auto rounded-lg bg-slate-950 p-3 text-xs leading-5 text-slate-100">{JSON.stringify(
+                                            definitionStep(
+                                                attempt.original_definition,
+                                                attempt.failed_step,
+                                            ),
+                                            null,
+                                            2,
+                                        )}</pre>
+                                </div>
+                                <div class="min-w-0">
+                                    <p
+                                        class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                                    >
+                                        Replacement step
+                                    </p>
+                                    <pre
+                                        class="max-h-56 overflow-auto rounded-lg bg-slate-950 p-3 text-xs leading-5 text-slate-100">{JSON.stringify(
+                                            definitionStep(
+                                                attempt.proposed_definition,
+                                                attempt.failed_step,
+                                            ),
+                                            null,
+                                            2,
+                                        )}</pre>
+                                </div>
+                            </div>
+                            {#if attempt.failure_message}
+                                <p class="text-xs text-red-700">
+                                    {attempt.failure_message}
+                                </p>
+                            {/if}
+                        </article>
+                    {/each}
+                </section>
             {/if}
 
             <div

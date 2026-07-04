@@ -2,15 +2,13 @@ import { createHash } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { chromium, errors } from 'playwright';
+import { chromium } from 'playwright';
 import type { Browser, BrowserContext, Page } from 'playwright';
 import { RunnerApiClient } from './api-client.js';
-import {
-    CredentialConfigurationError,
-    parseCredentialValues,
-    validateCredentialMetadata,
-} from './credentials.js';
-import { AssertionFailure, executeDefinition } from './interpreter.js';
+import { parseCredentialValues, validateCredentialMetadata } from './credentials.js';
+import { sanitizeAriaSnapshot } from './diagnostics.js';
+import { classifyFailure } from './failures.js';
+import { executeDefinition } from './interpreter.js';
 import { redact } from './redact.js';
 import type {
     ExecutionResult,
@@ -101,6 +99,7 @@ async function runExecutionAttempt(
     const tracePath = join(directory, 'trace.zip');
     const screenshotPath = join(directory, 'failure.png');
     const logPath = join(directory, 'console.log');
+    const diagnosticPath = join(directory, 'diagnostic.json');
     const logs: string[] = [];
     let context: BrowserContext | undefined;
     let traceStarted = false;
@@ -169,6 +168,13 @@ async function runExecutionAttempt(
             const page = context.pages().at(-1);
 
             if (page) {
+                await writeDiagnostic(
+                    page,
+                    diagnosticPath,
+                    payload.diagnostic_max_characters,
+                    secretValues,
+                    error,
+                ).catch(() => undefined);
                 await redactPage(page, secretValues);
                 await page
                     .screenshot({ path: screenshotPath, fullPage: true })
@@ -212,6 +218,13 @@ async function runExecutionAttempt(
             logPath,
             'text/plain',
         );
+        await uploadIfPresent(
+            payload.id,
+            execution.id,
+            'Diagnostic',
+            diagnosticPath,
+            'application/json',
+        );
 
         return { ...failure, console_excerpt: sanitizedLogs(logs) };
     } finally {
@@ -220,54 +233,10 @@ async function runExecutionAttempt(
     }
 }
 
-function classifyFailure(
-    error: unknown,
-    message: string,
-    durationMs: number,
-): ExecutionResult {
-    if (error instanceof AssertionFailure) {
-        return {
-            status: 'Failed',
-            duration_ms: durationMs,
-            failure_type: 'assertion',
-            failure_message: message,
-            failed_step: error.stepNumber,
-        };
-    }
-
-    if (error instanceof CredentialConfigurationError) {
-        return {
-            status: 'Blocked',
-            duration_ms: durationMs,
-            failure_type: 'credential',
-            failure_message: message,
-        };
-    }
-
-    if (
-        error instanceof errors.TimeoutError ||
-        message === 'The case exceeded its configured timeout.'
-    ) {
-        return {
-            status: 'Blocked',
-            duration_ms: durationMs,
-            failure_type: 'infrastructure',
-            failure_message: message,
-        };
-    }
-
-    return {
-        status: 'Blocked',
-        duration_ms: durationMs,
-        failure_type: 'infrastructure',
-        failure_message: message,
-    };
-}
-
 async function uploadIfPresent(
     automationRunId: string,
     executionId: string,
-    type: 'Screenshot' | 'Trace' | 'Log',
+    type: 'Screenshot' | 'Trace' | 'Log' | 'Diagnostic',
     path: string,
     mimeType: string,
 ): Promise<void> {
@@ -279,6 +248,81 @@ async function uploadIfPresent(
             );
         });
 }
+
+async function writeDiagnostic(
+    page: Page,
+    path: string,
+    maximumCharacters: number,
+    secrets: string[],
+    error: unknown,
+): Promise<void> {
+    const current = new URL(page.url());
+    const ariaSnapshot = await page
+        .locator('body')
+        .ariaSnapshot({ timeout: 3_000 })
+        .catch(() => '');
+    const candidates = await page
+        .locator('a, button, input, select, textarea, [role], [data-testid]')
+        .evaluateAll((elements) =>
+            elements
+                .filter((element) => {
+                    const style = window.getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+
+                    return (
+                        style.visibility !== 'hidden' &&
+                        style.display !== 'none' &&
+                        rect.width > 0 &&
+                        rect.height > 0
+                    );
+                })
+                .slice(0, 50)
+                .map((element) => {
+                    const html = element as HTMLElement;
+                    const input =
+                        element instanceof HTMLInputElement ||
+                        element instanceof HTMLSelectElement ||
+                        element instanceof HTMLTextAreaElement;
+
+                    return {
+                        tag: element.tagName.toLowerCase(),
+                        role: element.getAttribute('role'),
+                        label: element.getAttribute('aria-label'),
+                        test_id: element.getAttribute('data-testid'),
+                        name: element.getAttribute('name'),
+                        type: element.getAttribute('type'),
+                        text: input
+                            ? null
+                            : (html.innerText || element.textContent || '')
+                                  .trim()
+                                  .slice(0, 120),
+                    };
+                }),
+        )
+        .catch(() => []);
+    const diagnostic = {
+        relative_url: `${current.pathname}${current.search}${current.hash}`,
+        page_title: await page.title().catch(() => ''),
+        failure: error instanceof Error ? error.message : String(error),
+        aria_snapshot: sanitizeAriaSnapshot(ariaSnapshot).slice(0, 12_000),
+        visible_candidates: candidates,
+    };
+    const serialized = redact(JSON.stringify(diagnostic), secrets);
+    const maximum = Math.max(2_000, Math.min(maximumCharacters, 50_000));
+
+    if (serialized.length <= maximum) {
+        await writeFile(path, serialized, 'utf8');
+
+        return;
+    }
+
+    diagnostic.aria_snapshot = diagnostic.aria_snapshot.slice(
+        0,
+        Math.max(0, 12_000 - (serialized.length - maximum)),
+    );
+    await writeFile(path, redact(JSON.stringify(diagnostic), secrets), 'utf8');
+}
+
 
 function sanitizedLogs(logs: string[]): string {
     return redact(logs.join('\n').slice(-8_000), secretValues);

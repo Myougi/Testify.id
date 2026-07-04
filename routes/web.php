@@ -59,6 +59,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('projects/{project}/automation-settings', [AutomationController::class, 'settings']);
         Route::put('projects/{project}/automation-settings', [AutomationController::class, 'updateSettings']);
         Route::get('test-cases/{testCase}/automation', [AutomationController::class, 'show']);
+        Route::get('test-cases/{testCase}/automation/healing-attempts', [AutomationController::class, 'healingHistory']);
         Route::put('test-cases/{testCase}/automation', [AutomationController::class, 'update']);
         Route::post('test-cases/{testCase}/automation/generate', [AutomationController::class, 'generate']);
         Route::post('test-cases/{testCase}/automation/validate', [AutomationController::class, 'validateDefinition']);

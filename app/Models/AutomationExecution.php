@@ -10,9 +10,23 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property string $id
+ * @property string $automation_run_id
+ * @property int $test_case_id
+ * @property int|null $test_case_automation_id
+ * @property array<string, mixed>|null $definition_snapshot
+ * @property string $status
+ * @property int|null $duration_ms
+ * @property string|null $failure_type
+ * @property string|null $failure_code
+ * @property string|null $failure_message
+ * @property int|null $failed_step
+ * @property string|null $console_excerpt
+ */
 #[Fillable([
     'id', 'automation_run_id', 'test_case_id', 'test_case_automation_id', 'definition_snapshot',
-    'status', 'duration_ms', 'failure_type', 'failure_message', 'failed_step',
+    'status', 'duration_ms', 'failure_type', 'failure_code', 'failure_message', 'failed_step',
     'console_excerpt', 'started_at', 'completed_at',
 ])]
 class AutomationExecution extends Model
@@ -63,5 +77,11 @@ class AutomationExecution extends Model
     public function artifacts(): HasMany
     {
         return $this->hasMany(AutomationArtifact::class);
+    }
+
+    /** @return HasMany<AutomationHealingAttempt, $this> */
+    public function healingAttempts(): HasMany
+    {
+        return $this->hasMany(AutomationHealingAttempt::class, 'source_execution_id');
     }
 }

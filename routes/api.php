@@ -85,6 +85,7 @@ Route::prefix('v1')->middleware(['api.request-id', 'api.json', 'api.sparse-field
         Route::patch('test-runs/{testRun}/case-results/{testCase}', [TestRunController::class, 'updateCaseResult'])->middleware(['api.ability:test-runs:write', 'throttle:api-write']);
 
         Route::get('test-cases/{testCase}/automation', [AutomationController::class, 'show'])->middleware(['api.ability:automations:read', 'throttle:api-read']);
+        Route::get('test-cases/{testCase}/automation/healing-attempts', [AutomationController::class, 'healingHistory'])->middleware(['api.ability:automations:read', 'throttle:api-read']);
         Route::post('test-cases/{testCase}/automation/generate', [AutomationController::class, 'generate'])->middleware(['api.ability:automations:write', 'throttle:api-write']);
         Route::patch('test-cases/{testCase}/automation', [AutomationController::class, 'update'])->middleware(['api.ability:automations:write', 'throttle:api-write']);
         Route::post('test-cases/{testCase}/automation/validate', [AutomationController::class, 'validateDefinition'])->middleware(['api.ability:automations:write', 'throttle:api-write']);
