@@ -3,8 +3,13 @@
 return [
     'enabled' => (bool) env('AUTOMATION_ENABLED', false),
 
+    'ai' => [
+        'timeout_seconds' => (int) env('AUTOMATION_AI_TIMEOUT_SECONDS', 180),
+    ],
+
     'ai_healing' => [
         'enabled' => (bool) env('AUTOMATION_AI_HEALING_ENABLED', false),
+        'timeout_seconds' => (int) env('AUTOMATION_AI_HEALING_TIMEOUT_SECONDS', 180),
         'max_attempts' => (int) env('AUTOMATION_MAX_AUTO_HEAL_ATTEMPTS', 1),
         'diagnostic_max_characters' => (int) env('AUTOMATION_DIAGNOSTIC_MAX_CHARACTERS', 20000),
     ],

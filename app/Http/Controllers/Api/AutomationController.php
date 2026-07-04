@@ -16,6 +16,7 @@ use App\Services\Automation\AutomationDispatchService;
 use App\Services\Automation\AutomationSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -219,14 +220,14 @@ class AutomationController extends Controller
                 'status' => $automation->status,
                 'definition' => $automation->definition,
                 'source_hash' => $automation->source_hash,
-                'generated_at' => $automation->generated_at?->toIso8601String(),
+                'generated_at' => $this->dateTime($automation->generated_at),
                 'last_validated_environment' => $automation->last_validated_environment,
-                'last_validated_at' => $automation->last_validated_at?->toIso8601String(),
+                'last_validated_at' => $this->dateTime($automation->last_validated_at),
                 'validation_summary' => $automation->validation_summary,
                 'approved_by' => $automation->approver?->name,
                 'approval_source' => $automation->approval_source,
-                'approved_at' => $automation->approved_at?->toIso8601String(),
-                'last_healed_at' => $automation->last_healed_at?->toIso8601String(),
+                'approved_at' => $this->dateTime($automation->approved_at),
+                'last_healed_at' => $this->dateTime($automation->last_healed_at),
                 'healing_history' => $automation->healingAttempts
                     ->sortByDesc('created_at')
                     ->take(10)
@@ -250,8 +251,8 @@ class AutomationController extends Controller
             'status' => $run->status,
             'provider_run_url' => $run->provider_run_url,
             'failure_message' => $run->failure_message,
-            'started_at' => $run->started_at?->toIso8601String(),
-            'completed_at' => $run->completed_at?->toIso8601String(),
+            'started_at' => $this->dateTime($run->started_at),
+            'completed_at' => $this->dateTime($run->completed_at),
             'executions' => $run->executions->map(fn (AutomationExecution $execution): array => [
                 'id' => $execution->id,
                 'test_case_id' => $execution->test_case_id,
@@ -287,8 +288,17 @@ class AutomationController extends Controller
             'failure_message' => $attempt->failure_message,
             'source_execution_id' => $attempt->source_execution_id,
             'revalidation_run_id' => $attempt->revalidation_run_id,
-            'created_at' => $attempt->created_at?->toIso8601String(),
-            'completed_at' => $attempt->completed_at?->toIso8601String(),
+            'created_at' => $this->dateTime($attempt->created_at),
+            'completed_at' => $this->dateTime($attempt->completed_at),
         ];
+    }
+
+    private function dateTime(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return Carbon::parse($value)->utc()->toIso8601String();
     }
 }

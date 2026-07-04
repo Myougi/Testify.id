@@ -18,6 +18,7 @@ use App\Services\Automation\AutomationSettingsService;
 use App\Support\Api\V1\JsonApi;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 class AutomationController extends Controller
@@ -237,13 +238,13 @@ class AutomationController extends Controller
                 'status' => $automation->status,
                 'definition' => $automation->definition,
                 'source_hash' => $automation->source_hash,
-                'generated_at' => $automation->generated_at?->utc()->toIso8601String(),
+                'generated_at' => $this->dateTime($automation->generated_at),
                 'last_validated_environment' => $automation->last_validated_environment,
-                'last_validated_at' => $automation->last_validated_at?->utc()->toIso8601String(),
+                'last_validated_at' => $this->dateTime($automation->last_validated_at),
                 'validation_summary' => $automation->validation_summary,
                 'approval_source' => $automation->approval_source,
-                'approved_at' => $automation->approved_at?->utc()->toIso8601String(),
-                'last_healed_at' => $automation->last_healed_at?->utc()->toIso8601String(),
+                'approved_at' => $this->dateTime($automation->approved_at),
+                'last_healed_at' => $this->dateTime($automation->last_healed_at),
             ],
             'relationships' => [
                 'test_case' => ['data' => ['type' => 'test-cases', 'id' => (string) $automation->test_case_id]],
@@ -263,8 +264,17 @@ class AutomationController extends Controller
             'rationale' => $attempt->rationale,
             'confidence' => $attempt->confidence,
             'failure_message' => $attempt->failure_message,
-            'created_at' => $attempt->created_at?->utc()->toIso8601String(),
-            'completed_at' => $attempt->completed_at?->utc()->toIso8601String(),
+            'created_at' => $this->dateTime($attempt->created_at),
+            'completed_at' => $this->dateTime($attempt->completed_at),
         ];
+    }
+
+    private function dateTime(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return Carbon::parse($value)->utc()->toIso8601String();
     }
 }

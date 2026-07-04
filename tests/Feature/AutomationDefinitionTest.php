@@ -67,6 +67,14 @@ test('generated playwright steps compile to exact action fields', function (): v
     ]);
 });
 
+test('automation ai agents use the configured timeout', function (): void {
+    config()->set('automation.ai.timeout_seconds', 180);
+    config()->set('automation.ai_healing.timeout_seconds', 180);
+
+    expect(AutomationDefinitionAgent::make(context: [])->timeout())->toBe(180)
+        ->and(AutomationHealingAgent::make(context: [])->timeout())->toBe(180);
+});
+
 test('automation generation corrects malformed structured output once', function (): void {
     $user = User::factory()->create();
     $project = Project::factory()->for($user)->create();
