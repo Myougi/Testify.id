@@ -75,6 +75,39 @@ test('automation ai agents use the configured timeout', function (): void {
         ->and(AutomationHealingAgent::make(context: [])->timeout())->toBe(180);
 });
 
+test('automation ai agents use env-configured models', function (): void {
+    config()->set('automation.ai.model', 'google/gemini-3.5-flash');
+    config()->set('automation.ai_healing.model', 'google/gemma-3-27b-it');
+    config()->set('ai.providers.openrouter.models.text.default', 'google/gemma-4-31b-it');
+    config()->set('ai.providers.openrouter.models.text.cheapest', 'google/gemini-3.5-flash');
+
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user)->create();
+    $module = TestRepositoryModule::factory()->for($project, 'project')->create();
+    $case = TestCase::factory()->for($project, 'project')->for($module, 'module')->create();
+    TestCaseStep::factory()->for($case)->create([
+        'position' => 1,
+        'action' => 'Open the login page.',
+        'expected_result' => 'The login page is displayed.',
+    ]);
+
+    AutomationDefinitionAgent::fake([
+        [
+            'definition' => [
+                'version' => 1,
+                'steps' => [['action' => 'navigate', 'path' => '/login']],
+            ],
+            'warnings' => [],
+        ],
+    ])->preventStrayPrompts();
+
+    app(AutomationDefinitionService::class)->generate($case);
+
+    AutomationDefinitionAgent::assertPrompted(fn ($prompt): bool => $prompt->model === 'google/gemini-3.5-flash');
+    expect(AutomationDefinitionAgent::make(context: [])->model())->toBe('google/gemini-3.5-flash')
+        ->and(AutomationHealingAgent::make(context: [])->model())->toBe('google/gemma-3-27b-it');
+});
+
 test('automation generation corrects malformed structured output once', function (): void {
     $user = User::factory()->create();
     $project = Project::factory()->for($user)->create();

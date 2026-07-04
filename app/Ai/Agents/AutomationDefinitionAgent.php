@@ -45,6 +45,13 @@ class AutomationDefinitionAgent implements Agent, Conversational, HasStructuredO
         return (int) config('automation.ai.timeout_seconds', 180);
     }
 
+    public function model(): string
+    {
+        return (string) (config('automation.ai.model')
+            ?? config('ai.providers.openrouter.models.text.cheapest')
+            ?? config('ai.providers.openrouter.models.text.default'));
+    }
+
     /** @return Message[] */
     public function messages(): iterable
     {

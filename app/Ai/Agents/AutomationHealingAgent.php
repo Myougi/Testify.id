@@ -43,6 +43,14 @@ class AutomationHealingAgent implements Agent, Conversational, HasStructuredOutp
         return (int) config('automation.ai_healing.timeout_seconds', 180);
     }
 
+    public function model(): string
+    {
+        return (string) (config('automation.ai_healing.model')
+            ?? config('automation.ai.model')
+            ?? config('ai.providers.openrouter.models.text.cheapest')
+            ?? config('ai.providers.openrouter.models.text.default'));
+    }
+
     /** @return Message[] */
     public function messages(): iterable
     {
