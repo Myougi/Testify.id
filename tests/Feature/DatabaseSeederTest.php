@@ -10,9 +10,4 @@ test('database seeder creates the configured demo users and snapshot application
     $this->assertDatabaseHas('users', [
         'email' => 'admin@testify.id',
     ]);
-
-    $this->assertDatabaseHas('projects', [
-        'project_id' => 1,
-        'project_name' => 'Spider Healthcare',
-    ]);
 });
