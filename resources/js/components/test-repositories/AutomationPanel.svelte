@@ -113,6 +113,18 @@
             payload?.latest_generation?.status ?? '',
         );
 
+    const latestGenerationFailureMessage = (): string | null => {
+        const failureMessage = payload?.latest_generation?.failure_message?.trim();
+        const progressMessage =
+            payload?.latest_generation?.progress_message?.trim();
+
+        if (!failureMessage) {
+            return null;
+        }
+
+        return failureMessage === progressMessage ? null : failureMessage;
+    };
+
     const hydrate = (next: AutomationCasePayload): void => {
         payload = next;
         warnings = next.latest_generation?.warnings ?? [];
@@ -352,9 +364,9 @@
                                     {payload.latest_generation.progress_message}
                                 </p>
                             {/if}
-                            {#if payload.latest_generation.failure_message}
+                            {#if latestGenerationFailureMessage()}
                                 <p class="mt-1 text-red-700">
-                                    {payload.latest_generation.failure_message}
+                                    {latestGenerationFailureMessage()}
                                 </p>
                             {/if}
                         </div>

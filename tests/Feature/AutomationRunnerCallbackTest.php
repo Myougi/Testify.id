@@ -142,6 +142,49 @@ test('signed generation callbacks update progress and save a browser recorded dr
         ->and($case->fresh()->automation?->last_validated_at)->toBeNull();
 });
 
+test('signed generation callbacks store a single readable failure summary for invalid returned dsl', function (): void {
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user)->create();
+    $module = TestRepositoryModule::factory()->for($project, 'project')->create();
+    $case = TestCase::factory()->for($project, 'project')->for($module, 'module')->create();
+    $sourceHash = app(AutomationDefinitionService::class)->sourceHash($case);
+    $run = AutomationRun::factory()->for($user, 'requester')->create([
+        'kind' => AutomationRun::KIND_GENERATION,
+        'test_run_id' => null,
+        'generation_source' => AutomationRun::SOURCE_AGENTIC,
+        'source_hash' => $sourceHash,
+        'phase' => AutomationRun::PHASE_STARTING_BROWSER,
+    ]);
+    $execution = AutomationExecution::factory()->for($run, 'automationRun')->for($case)->create([
+        'definition_snapshot' => null,
+    ]);
+
+    signedRunnerPost($this, "/api/runner/v1/automation-runs/{$run->id}/start", '{}', 'generation-start-invalid')->assertOk();
+
+    $resultBody = json_encode([
+        'success' => true,
+        'definition' => [
+            'version' => 1,
+            'steps' => [['action' => 'click']],
+        ],
+        'warnings' => [],
+        'duration_ms' => 1500,
+    ], JSON_THROW_ON_ERROR);
+
+    signedRunnerPost(
+        $this,
+        "/api/runner/v1/automation-runs/{$run->id}/executions/{$execution->id}/generation-result",
+        $resultBody,
+        'generation-result-invalid',
+    )->assertOk();
+
+    expect($run->fresh()->status)->toBe(AutomationRun::STATUS_FAILED)
+        ->and($run->fresh()->progress_message)->toBe('Step 1 click is missing locator_by.')
+        ->and($run->fresh()->failure_message)->toBe('Step 1 click is missing locator_by.')
+        ->and($execution->fresh()->status)->toBe(AutomationExecution::STATUS_FAILED)
+        ->and($execution->fresh()->failure_message)->toBe('Step 1 click is missing locator_by.');
+});
+
 test('artifacts become visible only after size and checksum verification', function (): void {
     [, $execution] = runnerCallbackFixture();
     Storage::fake('automation-artifacts');

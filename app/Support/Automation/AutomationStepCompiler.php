@@ -53,40 +53,49 @@ class AutomationStepCompiler
     public function compileStep(mixed $generated, int $index = 0): array
     {
         $pointer = 'definition.steps.'.$index;
+        $stepNumber = $index + 1;
 
         if (! is_array($generated) || array_is_list($generated)) {
             throw ValidationException::withMessages([$pointer => 'The generated step must be an object.']);
         }
 
-        $action = $this->requiredString($generated['action'] ?? null, $pointer.'.action');
+        $action = $this->requiredString($generated['action'] ?? null, $pointer.'.action', $stepNumber, fieldName: 'action');
 
         if (! in_array($action, self::ACTIONS, true)) {
-            throw ValidationException::withMessages([$pointer.'.action' => 'The generated action is not supported.']);
+            throw ValidationException::withMessages([
+                $pointer.'.action' => "Step {$stepNumber} uses an unsupported action.",
+            ]);
         }
 
         return match ($action) {
             'navigate', 'assert_url' => [
                 'action' => $action,
-                'path' => $this->requiredString($generated['path'] ?? null, $pointer.'.path'),
+                'path' => $this->requiredString($generated['path'] ?? null, $pointer.'.path', $stepNumber, $action, 'path'),
             ],
-            'fill', 'select' => $this->compileInputStep($generated, $action, $pointer),
+            'fill', 'select' => $this->compileInputStep($generated, $action, $pointer, $stepNumber),
             'press' => [
                 'action' => $action,
-                'locator' => $this->compileLocator($generated, $pointer),
-                'key' => $this->requiredString($generated['key'] ?? null, $pointer.'.key'),
+                'locator' => $this->compileLocator($generated, $pointer, $stepNumber, $action),
+                'key' => $this->requiredString($generated['key'] ?? null, $pointer.'.key', $stepNumber, $action, 'key'),
             ],
             'wait' => [
                 'action' => $action,
-                'milliseconds' => $this->milliseconds($generated['milliseconds'] ?? null, $pointer.'.milliseconds'),
+                'milliseconds' => $this->milliseconds($generated['milliseconds'] ?? null, $pointer.'.milliseconds', $stepNumber),
             ],
             'assert_text', 'assert_value' => [
                 'action' => $action,
-                'locator' => $this->compileLocator($generated, $pointer),
-                'value' => $this->requiredString($generated['value'] ?? $generated['literal_value'] ?? null, $pointer.'.value'),
+                'locator' => $this->compileLocator($generated, $pointer, $stepNumber, $action),
+                'value' => $this->requiredString(
+                    $generated['value'] ?? $generated['literal_value'] ?? null,
+                    $pointer.'.value',
+                    $stepNumber,
+                    $action,
+                    'value',
+                ),
             ],
             default => [
                 'action' => $action,
-                'locator' => $this->compileLocator($generated, $pointer),
+                'locator' => $this->compileLocator($generated, $pointer, $stepNumber, $action),
             ],
         };
     }
@@ -94,7 +103,7 @@ class AutomationStepCompiler
     /** @param array<string, mixed> $generated
      * @return array<string, mixed>
      */
-    private function compileInputStep(array $generated, string $action, string $pointer): array
+    private function compileInputStep(array $generated, string $action, string $pointer, int $stepNumber): array
     {
         $literal = $this->nullableString($generated['value'] ?? $generated['literal_value'] ?? null);
         $secret = $this->secretReference($generated);
@@ -105,13 +114,13 @@ class AutomationStepCompiler
 
         if ($hasLiteral === $hasSecret || ($hasSecret && ($profile === null || $field === null))) {
             throw ValidationException::withMessages([
-                $pointer => 'Generated fill and select steps need exactly one literal value or complete credential reference.',
+                $pointer => "Step {$stepNumber} {$action} needs exactly one literal value or a complete credential reference.",
             ]);
         }
 
         return [
             'action' => $action,
-            'locator' => $this->compileLocator($generated, $pointer),
+            'locator' => $this->compileLocator($generated, $pointer, $stepNumber, $action),
             ...($hasLiteral
                 ? ['value' => $literal]
                 : ['secret' => ['profile' => $profile, 'field' => $field]]),
@@ -121,24 +130,26 @@ class AutomationStepCompiler
     /** @param array<string, mixed> $generated
      * @return array<string, string>
      */
-    private function compileLocator(array $generated, string $pointer): array
+    private function compileLocator(array $generated, string $pointer, int $stepNumber, string $action): array
     {
         $locator = $generated['locator'] ?? null;
 
         if (is_array($locator) && ! array_is_list($locator)) {
-            return $this->compileExistingLocator($locator, $pointer);
+            return $this->compileExistingLocator($locator, $pointer, $stepNumber, $action);
         }
 
-        $by = $this->requiredString($generated['locator_by'] ?? null, $pointer.'.locator_by');
+        $by = $this->requiredString($generated['locator_by'] ?? null, $pointer.'.locator_by', $stepNumber, $action, 'locator_by');
 
         if (! in_array($by, self::LOCATORS, true)) {
-            throw ValidationException::withMessages([$pointer.'.locator_by' => 'The generated locator strategy is not supported.']);
+            throw ValidationException::withMessages([
+                $pointer.'.locator_by' => "Step {$stepNumber} {$action} uses an unsupported locator_by strategy.",
+            ]);
         }
 
         if ($by === 'role') {
             $locator = [
                 'by' => 'role',
-                'role' => $this->requiredString($generated['locator_role'] ?? null, $pointer.'.locator_role'),
+                'role' => $this->requiredString($generated['locator_role'] ?? null, $pointer.'.locator_role', $stepNumber, $action, 'locator_role'),
             ];
             $name = $this->nullableString($generated['locator_name'] ?? null);
 
@@ -147,25 +158,27 @@ class AutomationStepCompiler
 
         return [
             'by' => $by,
-            'value' => $this->requiredString($generated['locator_value'] ?? null, $pointer.'.locator_value'),
+            'value' => $this->requiredString($generated['locator_value'] ?? null, $pointer.'.locator_value', $stepNumber, $action, 'locator_value'),
         ];
     }
 
     /** @param array<string, mixed> $locator
      * @return array<string, string>
      */
-    private function compileExistingLocator(array $locator, string $pointer): array
+    private function compileExistingLocator(array $locator, string $pointer, int $stepNumber, string $action): array
     {
-        $by = $this->requiredString($locator['by'] ?? null, $pointer.'.by');
+        $by = $this->requiredString($locator['by'] ?? null, $pointer.'.by', $stepNumber, $action, 'locator.by');
 
         if (! in_array($by, self::LOCATORS, true)) {
-            throw ValidationException::withMessages([$pointer.'.by' => 'The generated locator strategy is not supported.']);
+            throw ValidationException::withMessages([
+                $pointer.'.by' => "Step {$stepNumber} {$action} uses an unsupported locator strategy.",
+            ]);
         }
 
         if ($by === 'role') {
             $compiled = [
                 'by' => 'role',
-                'role' => $this->requiredString($locator['role'] ?? null, $pointer.'.role'),
+                'role' => $this->requiredString($locator['role'] ?? null, $pointer.'.role', $stepNumber, $action, 'locator.role'),
             ];
             $name = $this->nullableString($locator['name'] ?? null);
 
@@ -174,7 +187,7 @@ class AutomationStepCompiler
 
         return [
             'by' => $by,
-            'value' => $this->requiredString($locator['value'] ?? null, $pointer.'.value'),
+            'value' => $this->requiredString($locator['value'] ?? null, $pointer.'.value', $stepNumber, $action, 'locator.value'),
         ];
     }
 
@@ -199,28 +212,52 @@ class AutomationStepCompiler
         ];
     }
 
-    private function milliseconds(mixed $value, string $pointer): int
+    private function milliseconds(mixed $value, string $pointer, int $stepNumber): int
     {
         if (is_string($value) && is_numeric($value)) {
             $value = (int) $value;
         }
 
         if (! is_int($value) || $value < 0 || $value > 10000) {
-            throw ValidationException::withMessages([$pointer => 'Generated waits must be between 0 and 10000 milliseconds.']);
+            throw ValidationException::withMessages([
+                $pointer => "Step {$stepNumber} wait milliseconds must be between 0 and 10000.",
+            ]);
         }
 
         return $value;
     }
 
-    private function requiredString(mixed $value, string $pointer): string
-    {
+    private function requiredString(
+        mixed $value,
+        string $pointer,
+        int $stepNumber,
+        ?string $action = null,
+        ?string $fieldName = null,
+    ): string {
         $value = $this->nullableString($value);
 
         if ($value === null) {
-            throw ValidationException::withMessages([$pointer => 'This generated Playwright field is required.']);
+            $field = $fieldName ?? $this->fieldName($pointer);
+            $actionPrefix = $action === null ? '' : " {$action}";
+
+            throw ValidationException::withMessages([
+                $pointer => "Step {$stepNumber}{$actionPrefix} is missing {$field}.",
+            ]);
         }
 
         return $value;
+    }
+
+    private function fieldName(string $pointer): string
+    {
+        $field = str($pointer)->after('definition.steps.')->after('.')->value();
+
+        return match ($field) {
+            'by' => 'locator.by',
+            'role' => 'locator.role',
+            'value' => 'locator.value',
+            default => $field,
+        };
     }
 
     private function nullableString(mixed $value): ?string

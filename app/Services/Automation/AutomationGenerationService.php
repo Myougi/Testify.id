@@ -98,11 +98,19 @@ class AutomationGenerationService
                 'completed_at' => now(),
             ])->save();
         } catch (Throwable $exception) {
+            $summary = $this->summary($exception);
+
             if (! $this->agenticEnabled() || ! $this->isStaticOutputFailure($exception)) {
+                if ($exception instanceof ValidationException) {
+                    $this->fail($run->id, $exception, 'generation_validation_error');
+
+                    return;
+                }
+
                 throw $exception;
             }
 
-            $this->transitionToAgentic($run, $exception->getMessage());
+            $this->transitionToAgentic($run, $summary);
         }
     }
 
@@ -205,14 +213,38 @@ class AutomationGenerationService
         }
 
         $definition = is_array($result['definition'] ?? null) ? $result['definition'] : [];
-        $validated = $this->definitions->compileDefinition($execution->testCase, $definition, $run->environment);
-        $automation = $this->definitions->save(
-            $execution->testCase,
-            $validated,
-            generated: true,
-            generationSource: AutomationRun::SOURCE_AGENTIC,
-            generationRunId: $run->id,
-        );
+
+        try {
+            $validated = $this->definitions->compileDefinition($execution->testCase, $definition, $run->environment);
+            $automation = $this->definitions->save(
+                $execution->testCase,
+                $validated,
+                generated: true,
+                generationSource: AutomationRun::SOURCE_AGENTIC,
+                generationRunId: $run->id,
+            );
+        } catch (ValidationException $exception) {
+            $message = $this->summary($exception);
+            $execution->forceFill([
+                'status' => AutomationExecution::STATUS_FAILED,
+                'failure_type' => 'generation',
+                'failure_code' => 'generation_validation_error',
+                'failure_message' => $message,
+                'duration_ms' => isset($result['duration_ms']) ? max(0, (int) $result['duration_ms']) : null,
+                'completed_at' => now(),
+            ])->save();
+            $run->forceFill([
+                'status' => AutomationRun::STATUS_FAILED,
+                'phase' => AutomationRun::PHASE_FAILED,
+                'progress_message' => $message,
+                'failure_code' => 'generation_validation_error',
+                'failure_message' => $message,
+                'completed_at' => now(),
+            ])->save();
+
+            return $execution->fresh();
+        }
+
         $warnings = [];
         $resultWarnings = $result['warnings'] ?? null;
 
@@ -249,7 +281,7 @@ class AutomationGenerationService
             return;
         }
 
-        $message = $this->limited($exception->getMessage(), 10000) ?? 'Automation generation failed.';
+        $message = $this->summary($exception);
         $run->forceFill([
             'status' => AutomationRun::STATUS_ERROR,
             'phase' => AutomationRun::PHASE_FAILED,
@@ -403,6 +435,21 @@ class AutomationGenerationService
             AutomationRun::STATUS_ERROR,
             AutomationRun::STATUS_CANCELLED,
         ], true);
+    }
+
+    private function summary(Throwable $exception): string
+    {
+        if ($exception instanceof ValidationException) {
+            foreach ($exception->errors() as $messages) {
+                if (is_array($messages) && isset($messages[0]) && is_string($messages[0])) {
+                    return $this->limited($messages[0], 10000) ?? 'Automation generation failed validation.';
+                }
+            }
+
+            return 'Automation generation failed validation.';
+        }
+
+        return $this->limited($exception->getMessage(), 10000) ?? 'Automation generation failed.';
     }
 
     private function limited(mixed $value, int $maximum): ?string

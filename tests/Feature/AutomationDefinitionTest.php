@@ -67,6 +67,85 @@ test('generated playwright steps compile to exact action fields', function (): v
     ]);
 });
 
+test('compiler names the missing path for navigate steps', function (): void {
+    $compiler = app(AutomationStepCompiler::class);
+
+    expect(fn () => $compiler->compileDefinition([
+        'version' => 1,
+        'steps' => [['action' => 'navigate']],
+    ]))->toThrow(
+        fn (ValidationException $exception) => expect($exception->errors())->toMatchArray([
+            'definition.steps.0.path' => ['Step 1 navigate is missing path.'],
+        ]),
+    );
+});
+
+test('compiler names the missing locator field for click steps', function (): void {
+    $compiler = app(AutomationStepCompiler::class);
+
+    expect(fn () => $compiler->compileDefinition([
+        'version' => 1,
+        'steps' => [['action' => 'click']],
+    ]))->toThrow(
+        fn (ValidationException $exception) => expect($exception->errors())->toMatchArray([
+            'definition.steps.0.locator_by' => ['Step 1 click is missing locator_by.'],
+        ]),
+    );
+});
+
+test('compiler names the missing key for press steps', function (): void {
+    $compiler = app(AutomationStepCompiler::class);
+
+    expect(fn () => $compiler->compileDefinition([
+        'version' => 1,
+        'steps' => [[
+            'action' => 'press',
+            'locator_by' => 'label',
+            'locator_value' => 'Email',
+        ]],
+    ]))->toThrow(
+        fn (ValidationException $exception) => expect($exception->errors())->toMatchArray([
+            'definition.steps.0.key' => ['Step 1 press is missing key.'],
+        ]),
+    );
+});
+
+test('compiler names the missing value for assert text and assert value steps', function (string $action): void {
+    $compiler = app(AutomationStepCompiler::class);
+
+    expect(fn () => $compiler->compileDefinition([
+        'version' => 1,
+        'steps' => [[
+            'action' => $action,
+            'locator_by' => 'text',
+            'locator_value' => 'Dashboard',
+        ]],
+    ]))->toThrow(
+        fn (ValidationException $exception) => expect($exception->errors())->toMatchArray([
+            'definition.steps.0.value' => ["Step 1 {$action} is missing value."],
+        ]),
+    );
+})->with(['assert_text', 'assert_value']);
+
+test('compiler reports invalid fill and select credential combinations clearly', function (string $action): void {
+    $compiler = app(AutomationStepCompiler::class);
+
+    expect(fn () => $compiler->compileDefinition([
+        'version' => 1,
+        'steps' => [[
+            'action' => $action,
+            'locator_by' => 'label',
+            'locator_value' => 'Username',
+            'value' => 'standard_user',
+            'secret_profile' => 'default_user',
+        ]],
+    ]))->toThrow(
+        fn (ValidationException $exception) => expect($exception->errors())->toMatchArray([
+            'definition.steps.0' => ["Step 1 {$action} needs exactly one literal value or a complete credential reference."],
+        ]),
+    );
+})->with(['fill', 'select']);
+
 test('compiler accepts already-shaped dsl locator and value fields', function (): void {
     $compiler = app(AutomationStepCompiler::class);
     $definition = $compiler->compileDefinition([
