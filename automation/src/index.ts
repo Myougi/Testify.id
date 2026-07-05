@@ -106,7 +106,7 @@ async function runExecutionAttempt(
 
     try {
         const definition = validateDefinition(
-            execution.definition,
+            execution.definition ?? {},
             payload.credential_profiles,
         );
         const usesCredentials = definition.steps.some(

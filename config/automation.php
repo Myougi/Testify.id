@@ -16,6 +16,16 @@ return [
         'diagnostic_max_characters' => (int) env('AUTOMATION_DIAGNOSTIC_MAX_CHARACTERS', 20000),
     ],
 
+    'agentic_generation' => [
+        'enabled' => (bool) env('AUTOMATION_AGENTIC_GENERATION_ENABLED', false),
+        'model' => env('AUTOMATION_AGENTIC_MODEL', env('AUTOMATION_AI_MODEL')),
+        'workflow' => env('AUTOMATION_GITHUB_GENERATION_WORKFLOW', 'agentic-automation-generation.yml'),
+        'max_turns' => (int) env('AUTOMATION_AGENTIC_MAX_TURNS', 30),
+        'timeout_minutes' => (int) env('AUTOMATION_AGENTIC_TIMEOUT_MINUTES', 15),
+        'snapshot_max_characters' => (int) env('AUTOMATION_AGENTIC_SNAPSHOT_MAX_CHARACTERS', 20000),
+        'prompt_max_characters' => (int) env('AUTOMATION_AGENTIC_PROMPT_MAX_CHARACTERS', 1000),
+    ],
+
     'github' => [
         'owner' => env('AUTOMATION_GITHUB_OWNER'),
         'repository' => env('AUTOMATION_GITHUB_REPOSITORY'),

@@ -8,6 +8,7 @@ use App\Models\AutomationExecution;
 use App\Models\AutomationRun;
 use App\Models\User;
 use App\Services\Api\V1\AuditService;
+use App\Services\Automation\AutomationGenerationService;
 use App\Services\Automation\AutomationResultService;
 use App\Services\Automation\RunnerIdempotencyService;
 use Illuminate\Http\JsonResponse;
@@ -18,6 +19,7 @@ class AutomationRunController extends Controller
 {
     public function __construct(
         private readonly AutomationResultService $results,
+        private readonly AutomationGenerationService $generation,
         private readonly AuditService $audit,
         private readonly RunnerIdempotencyService $idempotency,
     ) {}
@@ -87,6 +89,56 @@ class AutomationRunController extends Controller
                 'status' => $updated->status,
                 'duration_ms' => $updated->duration_ms,
                 'failure_type' => $updated->failure_type,
+            ], actor: $actor);
+
+            return response()->json(['data' => ['id' => $updated->id, 'status' => $updated->status]]);
+        });
+    }
+
+    public function progress(Request $request, string $automationRun): JsonResponse
+    {
+        $validated = $request->validate([
+            'phase' => ['required', 'string', Rule::in([
+                AutomationRun::PHASE_STARTING_BROWSER,
+                AutomationRun::PHASE_EXPLORING,
+                AutomationRun::PHASE_COMPILING,
+            ])],
+            'message' => ['nullable', 'string', 'max:500'],
+        ]);
+        $run = $this->run($automationRun);
+        $actor = $this->actor($run);
+
+        return $this->idempotency->execute($request, $actor, function () use ($request, $run, $validated, $actor): JsonResponse {
+            $updated = $this->generation->progress($run, $validated['phase'], $validated['message'] ?? null);
+            $this->audit->record($request, 'automation_generation.progressed', 'automation-runs', $updated, after: [
+                'phase' => $updated->phase,
+                'progress_message' => $updated->progress_message,
+            ], actor: $actor);
+
+            return response()->json(['data' => ['id' => $updated->id, 'phase' => $updated->phase]]);
+        });
+    }
+
+    public function generationResult(Request $request, string $automationRun, string $execution): JsonResponse
+    {
+        $validated = $request->validate([
+            'success' => ['required', 'boolean'],
+            'definition' => ['nullable', 'array', 'required_if:success,true'],
+            'warnings' => ['present', 'array', 'max:20'],
+            'warnings.*' => ['string', 'max:255'],
+            'failure_code' => ['nullable', 'string', 'max:60'],
+            'failure_message' => ['nullable', 'string', 'max:10000'],
+            'duration_ms' => ['nullable', 'integer', 'min:0'],
+        ]);
+        $run = $this->run($automationRun);
+        $model = $run->executions()->whereKey($execution)->firstOrFail();
+        $actor = $this->actor($run);
+
+        return $this->idempotency->execute($request, $actor, function () use ($request, $model, $validated, $actor): JsonResponse {
+            $updated = $this->generation->completeAgentic($model, $validated);
+            $this->audit->record($request, 'automation_generation.completed', 'automation-executions', $updated, after: [
+                'status' => $updated->status,
+                'failure_code' => $updated->failure_code,
             ], actor: $actor);
 
             return response()->json(['data' => ['id' => $updated->id, 'status' => $updated->status]]);

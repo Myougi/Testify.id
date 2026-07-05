@@ -24,6 +24,15 @@ use Illuminate\Support\Carbon;
  * @property string|null $provider_run_url
  * @property string $status
  * @property string|null $failure_message
+ * @property string|null $goal_prompt
+ * @property string|null $phase
+ * @property string|null $progress_message
+ * @property string|null $generation_source
+ * @property string|null $model
+ * @property list<string>|null $warnings
+ * @property string|null $failure_code
+ * @property string|null $source_hash
+ * @property string|null $parent_run_id
  * @property Carbon|null $dispatched_at
  * @property Carbon|null $started_at
  * @property Carbon|null $completed_at
@@ -31,6 +40,8 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'id', 'kind', 'test_run_id', 'requested_by', 'environment', 'base_url', 'attempt',
     'provider', 'provider_run_id', 'provider_run_url', 'status', 'failure_message',
+    'goal_prompt', 'phase', 'progress_message', 'generation_source', 'model', 'warnings',
+    'failure_code', 'source_hash', 'parent_run_id',
     'dispatched_at', 'started_at', 'completed_at',
 ])]
 class AutomationRun extends Model
@@ -38,6 +49,26 @@ class AutomationRun extends Model
     public const KIND_VALIDATION = 'Validation';
 
     public const KIND_EXECUTION = 'Execution';
+
+    public const KIND_GENERATION = 'Generation';
+
+    public const PHASE_STATIC = 'Generating static definition';
+
+    public const PHASE_NEEDS_GROUNDING = 'Static generation needs browser grounding';
+
+    public const PHASE_STARTING_BROWSER = 'Starting browser exploration';
+
+    public const PHASE_EXPLORING = 'Exploring browser';
+
+    public const PHASE_COMPILING = 'Compiling recorded actions';
+
+    public const PHASE_DRAFT_RECORDED = 'Draft - Browser Recorded';
+
+    public const PHASE_FAILED = 'Generation failed';
+
+    public const SOURCE_STATIC = 'Static AI';
+
+    public const SOURCE_AGENTIC = 'Agentic Browser';
 
     public const STATUS_QUEUED = 'Queued';
 
@@ -62,6 +93,7 @@ class AutomationRun extends Model
             'dispatched_at' => 'datetime',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
+            'warnings' => 'array',
         ];
     }
 

@@ -10,6 +10,7 @@ use App\Models\AutomationHealingAttempt;
 use App\Models\AutomationRun;
 use App\Models\TestCaseAutomation;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 use RuntimeException;
 use Throwable;
@@ -176,6 +177,12 @@ class AutomationHealingService
                 'status' => TestCaseAutomation::STATUS_INVALID,
                 'validation_summary' => 'AI healing failed: '.$this->limitedString($exception->getMessage(), 500),
             ])->save();
+
+            if ($this->shouldFallbackAfterHealingFailure($exception)) {
+                app(AutomationGenerationService::class)->dispatchAgenticFallback(
+                    $execution->fresh(['automationRun.requester', 'testCase.project.environments']),
+                );
+            }
         }
 
         return $attempt->fresh(['revalidationRun']);
@@ -217,6 +224,12 @@ class AutomationHealingService
                     : 'The Test Case or automation definition changed during healing.',
                 'completed_at' => now(),
             ])->save();
+
+            if ($isCurrent) {
+                app(AutomationGenerationService::class)->dispatchAgenticFallback(
+                    $attempt->sourceExecution()->with(['automationRun.requester', 'testCase.project.environments'])->firstOrFail(),
+                );
+            }
         }
 
         return true;
@@ -264,5 +277,19 @@ class AutomationHealingService
     private function limitedString(mixed $value, int $maximum): string
     {
         return mb_substr(is_string($value) ? trim($value) : '', 0, $maximum);
+    }
+
+    private function shouldFallbackAfterHealingFailure(Throwable $exception): bool
+    {
+        if ($exception instanceof ValidationException) {
+            return true;
+        }
+
+        $message = mb_strtolower($exception->getMessage());
+
+        return str_contains($message, 'structured output')
+            || str_contains($message, 'browser diagnostic')
+            || str_contains($message, 'replacement step')
+            || str_contains($message, 'definition changed');
     }
 }

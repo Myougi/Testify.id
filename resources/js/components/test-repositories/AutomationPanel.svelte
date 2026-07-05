@@ -31,6 +31,7 @@
 
     let payload = $state<AutomationCasePayload | null>(null);
     let definitionText = $state('');
+    let goalPrompt = $state('');
     let environment = $state<AutomationEnvironment>('SIT');
     let loading = $state(true);
     let action = $state<'generate' | 'save' | 'validate' | 'approve' | null>(
@@ -94,14 +95,27 @@
             return '';
         }
 
+        if (
+            payload.automation.status === 'Draft' &&
+            payload.automation.generation_source === 'Agentic Browser'
+        ) {
+            return 'Draft · Browser Recorded';
+        }
+
         return payload.automation.status === 'Ready' &&
             payload.automation.approval_source === 'AI Healed'
             ? 'Ready · AI Healed'
             : payload.automation.status;
     };
 
+    const generationActive = (): boolean =>
+        ['Queued', 'Dispatching', 'Running'].includes(
+            payload?.latest_generation?.status ?? '',
+        );
+
     const hydrate = (next: AutomationCasePayload): void => {
         payload = next;
+        warnings = next.latest_generation?.warnings ?? [];
         definitionText = next.automation?.definition
             ? JSON.stringify(next.automation.definition, null, 2)
             : '';
@@ -169,12 +183,13 @@
         errors = {};
 
         try {
-            const response = await generateTestCaseAutomation(testCaseId);
-            warnings = response.warnings;
-            hydrate(response.data);
-            toast.success(
-                'Automation draft generated. Review and validate it.',
+            await generateTestCaseAutomation(
+                testCaseId,
+                environment,
+                goalPrompt,
             );
+            await load(true);
+            toast.success('Automation generation queued.');
         } catch (error) {
             handleError(error);
         } finally {
@@ -243,7 +258,8 @@
         const timer = window.setInterval(() => {
             if (
                 payload?.automation?.status === 'Validating' ||
-                payload?.automation?.status === 'Healing'
+                payload?.automation?.status === 'Healing' ||
+                generationActive()
             ) {
                 void load(true);
             }
@@ -292,6 +308,69 @@
         {/if}
 
         <div class="mt-5 grid gap-4">
+            <div class="grid gap-2">
+                <label
+                    for="automation-generation-goal"
+                    class="text-sm font-semibold text-[#071a2f]"
+                    >Optional generation goal</label
+                >
+                <textarea
+                    id="automation-generation-goal"
+                    rows="2"
+                    maxlength="1000"
+                    bind:value={goalPrompt}
+                    class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-[#071a2f] outline-none focus:border-[#002b57] focus:ring-3 focus:ring-[#002b57]/15"
+                    placeholder="Add context for the saved Test Case, such as the intended user journey."
+                ></textarea>
+                <p class="text-xs text-slate-500">
+                    Saved Test Case steps remain authoritative. Browser
+                    grounding may run automatically when static generation
+                    cannot produce a reliable definition.
+                </p>
+            </div>
+
+            {#if payload.latest_generation}
+                <div
+                    class:border-red-200={['Failed', 'Error'].includes(
+                        payload.latest_generation.status,
+                    )}
+                    class:bg-red-50={['Failed', 'Error'].includes(
+                        payload.latest_generation.status,
+                    )}
+                    class="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-slate-700"
+                >
+                    <div
+                        class="flex flex-wrap items-start justify-between gap-2"
+                    >
+                        <div>
+                            <p class="font-semibold text-[#071a2f]">
+                                {payload.latest_generation.phase ??
+                                    payload.latest_generation.status}
+                            </p>
+                            {#if payload.latest_generation.progress_message}
+                                <p class="mt-1">
+                                    {payload.latest_generation.progress_message}
+                                </p>
+                            {/if}
+                            {#if payload.latest_generation.failure_message}
+                                <p class="mt-1 text-red-700">
+                                    {payload.latest_generation.failure_message}
+                                </p>
+                            {/if}
+                        </div>
+                        {#if payload.latest_generation.provider_run_url}
+                            <a
+                                href={payload.latest_generation
+                                    .provider_run_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                class="font-semibold text-[#002b57] underline underline-offset-2"
+                                >GitHub run</a
+                            >
+                        {/if}
+                    </div>
+                </div>
+            {/if}
             <div class="grid gap-2">
                 <label
                     for="automation-definition"
@@ -444,7 +523,10 @@
                         id="generate-automation-definition"
                         type="button"
                         variant="outline"
-                        disabled={action !== null || !payload.settings.enabled}
+                        disabled={action !== null ||
+                            !payload.settings.enabled ||
+                            !canValidateSelectedEnvironment() ||
+                            generationActive()}
                         onclick={generate}
                     >
                         {#if action === 'generate'}<Spinner />{:else}<Bot

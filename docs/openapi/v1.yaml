@@ -170,14 +170,15 @@ paths:
           $ref: '#/components/responses/Collection'
   /test-cases/{id}/automation/generate:
     post:
-      summary: Generate a safe automation definition draft
+      summary: Queue static generation with automatic browser-grounded fallback
+      description: Accepts an automation-generation-requests resource with a required non-production environment and an optional prompt of up to 1000 characters. Returns an automation run immediately.
       parameters:
         - $ref: '#/components/parameters/Id'
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         $ref: '#/components/requestBodies/JsonApi'
       responses:
-        '201':
+        '202':
           $ref: '#/components/responses/Resource'
   /test-cases/{id}/automation/validate:
     post:

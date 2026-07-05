@@ -12,7 +12,9 @@ class GitHubWorkflowDispatcher
     {
         $owner = trim((string) config('automation.github.owner'));
         $repository = trim((string) config('automation.github.repository'));
-        $workflow = trim((string) config('automation.github.workflow'));
+        $workflow = trim((string) ($automationRun->kind === AutomationRun::KIND_GENERATION
+            ? config('automation.agentic_generation.workflow')
+            : config('automation.github.workflow')));
         $ref = trim((string) config('automation.github.ref'));
         $token = trim((string) config('automation.github.token'));
 

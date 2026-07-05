@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\AutomationExecution;
 use App\Models\AutomationHealingAttempt;
+use App\Models\AutomationRun;
 use App\Models\Project;
 use App\Models\TestCase;
 use App\Models\TestCaseAutomation;
@@ -14,6 +15,7 @@ use App\Services\Api\V1\AuditService;
 use App\Services\Api\V1\IdempotencyService;
 use App\Services\Automation\AutomationDefinitionService;
 use App\Services\Automation\AutomationDispatchService;
+use App\Services\Automation\AutomationGenerationService;
 use App\Services\Automation\AutomationSettingsService;
 use App\Support\Api\V1\JsonApi;
 use Illuminate\Http\JsonResponse;
@@ -28,6 +30,7 @@ class AutomationController extends Controller
     public function __construct(
         private readonly AutomationDefinitionService $definitions,
         private readonly AutomationDispatchService $dispatch,
+        private readonly AutomationGenerationService $generation,
         private readonly AutomationSettingsService $settings,
         private readonly AiGenerationService $ai,
         private readonly IdempotencyService $idempotency,
@@ -109,15 +112,27 @@ class AutomationController extends Controller
     {
         JsonApi::assertType($request, 'automation-generation-requests');
         $case = $this->testCase($request, $testCase);
+        $attributes = JsonApi::attributes($request, 'automation-generation-requests');
+        $validated = validator($attributes, [
+            'environment' => ['required', 'string', Rule::in(TestRun::environments())],
+            'prompt' => ['nullable', 'string', 'max:'.config('automation.agentic_generation.prompt_max_characters', 1000)],
+        ])->validate();
 
         try {
-            return $this->idempotency->execute($request, function () use ($request, $case): JsonResponse {
-                $result = $this->definitions->generate($case);
-                $this->audit->record($request, 'automation.generated', 'test-case-automations', $result['automation'], after: [
-                    'warnings' => $result['warnings'],
-                ]);
+            return $this->idempotency->execute($request, function () use ($request, $case, $validated): JsonResponse {
+                $run = $this->generation->dispatch(
+                    $case,
+                    $validated['environment'],
+                    $request->user(),
+                    $validated['prompt'] ?? null,
+                );
+                $this->audit->record($request, 'automation.generation_queued', 'automation-runs', $run);
 
-                return $this->resource($result['automation'], 201, ['warnings' => $result['warnings']]);
+                return JsonApi::resource([
+                    'type' => 'automation-runs',
+                    'id' => $run->id,
+                    'attributes' => $this->generationRunAttributes($run),
+                ], 202);
             }, $request->user());
         } catch (ValidationException $exception) {
             throw $exception;
@@ -275,6 +290,8 @@ class AutomationController extends Controller
                 'approval_source' => $automation->approval_source,
                 'approved_at' => $this->dateTime($automation->approved_at),
                 'last_healed_at' => $this->dateTime($automation->last_healed_at),
+                'generation_source' => $automation->generation_source,
+                'generation_run_id' => $automation->generation_run_id,
             ],
             'relationships' => [
                 'test_case' => ['data' => ['type' => 'test-cases', 'id' => (string) $automation->test_case_id]],
@@ -296,6 +313,23 @@ class AutomationController extends Controller
             'failure_message' => $attempt->failure_message,
             'created_at' => $this->dateTime($attempt->created_at),
             'completed_at' => $this->dateTime($attempt->completed_at),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function generationRunAttributes(AutomationRun $run): array
+    {
+        return [
+            'kind' => $run->kind,
+            'status' => $run->status,
+            'environment' => $run->environment,
+            'phase' => $run->phase,
+            'progress_message' => $run->progress_message,
+            'generation_source' => $run->generation_source,
+            'provider_run_url' => $run->provider_run_url,
+            'failure_code' => $run->failure_code,
+            'failure_message' => $run->failure_message,
+            'warnings' => $run->warnings ?? [],
         ];
     }
 

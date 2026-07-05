@@ -42,6 +42,7 @@ class AutomationDefinitionService
         ];
         $structured = [];
         $lastException = null;
+        $definition = null;
         $attempts = 3;
 
         for ($attempt = 0; $attempt < $attempts; $attempt++) {
@@ -50,7 +51,7 @@ class AutomationDefinitionService
                 : $this->generateStructured([
                     ...$context,
                     'previous_output' => $structured['definition'] ?? null,
-                    'correction_errors' => $lastException?->errors(),
+                    'correction_errors' => $lastException->errors(),
                 ], 'Correct the previous output using every compiler error. Return a complete replacement definition.');
 
             try {
@@ -67,6 +68,10 @@ class AutomationDefinitionService
                     throw $exception;
                 }
             }
+        }
+
+        if ($definition === null) {
+            throw new RuntimeException('The automation agent did not produce a valid definition.');
         }
 
         $automation = $this->save($testCase, $definition, generated: true);
@@ -99,8 +104,13 @@ class AutomationDefinitionService
     }
 
     /** @param array<string, mixed> $definition */
-    public function save(TestCase $testCase, array $definition, bool $generated = false): TestCaseAutomation
-    {
+    public function save(
+        TestCase $testCase,
+        array $definition,
+        bool $generated = false,
+        ?string $generationSource = null,
+        ?string $generationRunId = null,
+    ): TestCaseAutomation {
         $validated = $this->validateDefinition($testCase, $definition);
 
         return TestCaseAutomation::query()->updateOrCreate(
@@ -118,6 +128,8 @@ class AutomationDefinitionService
                 'approved_by' => null,
                 'approval_source' => null,
                 'approved_at' => null,
+                'generation_source' => $generationSource,
+                'generation_run_id' => $generationRunId,
             ],
         )->fresh(['approver']);
     }
@@ -229,6 +241,19 @@ class AutomationDefinitionService
     public function compileStep(mixed $step, int $index): array
     {
         return $this->compiler->compileStep($step, $index);
+    }
+
+    /**
+     * @param  array<string, mixed>  $definition
+     * @return array{version: int, steps: list<array<string, mixed>>}
+     */
+    public function compileDefinition(TestCase $testCase, array $definition, ?string $environment = null): array
+    {
+        return $this->validateDefinition(
+            $testCase,
+            $this->compiler->compileDefinition($definition),
+            $environment,
+        );
     }
 
     public function sourceHash(TestCase $testCase): string

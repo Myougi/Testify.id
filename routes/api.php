@@ -21,6 +21,8 @@ Route::prefix('runner/v1')
     ->group(function (): void {
         Route::get('automation-runs/{automationRun}', [RunnerAutomationRunController::class, 'show']);
         Route::post('automation-runs/{automationRun}/start', [RunnerAutomationRunController::class, 'start']);
+        Route::post('automation-runs/{automationRun}/progress', [RunnerAutomationRunController::class, 'progress']);
+        Route::post('automation-runs/{automationRun}/executions/{execution}/generation-result', [RunnerAutomationRunController::class, 'generationResult']);
         Route::post('automation-runs/{automationRun}/executions/{execution}/result', [RunnerAutomationRunController::class, 'result']);
         Route::post('automation-runs/{automationRun}/executions/{execution}/artifacts', [RunnerAutomationRunController::class, 'reserveArtifact']);
         Route::post('automation-runs/{automationRun}/executions/{execution}/artifacts/{artifact}/finalize', [RunnerAutomationRunController::class, 'finalizeArtifact']);

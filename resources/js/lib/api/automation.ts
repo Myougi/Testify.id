@@ -43,6 +43,8 @@ export type TestCaseAutomation = {
     approval_source: 'User' | 'AI Healed' | null;
     approved_at: string | null;
     last_healed_at: string | null;
+    generation_source: 'Static AI' | 'Agentic Browser' | null;
+    generation_run_id: string | null;
     healing_history: AutomationHealingAttempt[];
 };
 
@@ -65,6 +67,7 @@ export type AutomationCasePayload = {
     test_case_id: number;
     automation_status: string;
     automation: TestCaseAutomation | null;
+    latest_generation: AutomationRun | null;
     settings: AutomationSettings;
 };
 
@@ -89,7 +92,7 @@ export type AutomationExecution = {
 
 export type AutomationRun = {
     id: string;
-    kind: 'Validation' | 'Execution';
+    kind: 'Validation' | 'Execution' | 'Generation';
     attempt: number;
     environment: AutomationEnvironment;
     status:
@@ -101,6 +104,11 @@ export type AutomationRun = {
         | 'Error'
         | 'Cancelled';
     provider_run_url: string | null;
+    phase: string | null;
+    progress_message: string | null;
+    generation_source: 'Static AI' | 'Agentic Browser' | null;
+    warnings: string[];
+    failure_code: string | null;
     failure_message: string | null;
     started_at: string | null;
     completed_at: string | null;
@@ -148,9 +156,12 @@ export const fetchTestCaseAutomation = (
 
 export const generateTestCaseAutomation = (
     testCaseId: number,
-): Promise<{ data: AutomationCasePayload; warnings: string[] }> =>
+    environment: AutomationEnvironment,
+    prompt: string,
+): Promise<{ data: AutomationRun }> =>
     request(`/api/test-cases/${testCaseId}/automation/generate`, {
         method: 'POST',
+        body: JSON.stringify({ environment, prompt: prompt || null }),
     });
 
 export const updateTestCaseAutomation = (

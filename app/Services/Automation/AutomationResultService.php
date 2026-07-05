@@ -7,6 +7,7 @@ use App\Models\AutomationExecution;
 use App\Models\AutomationRun;
 use App\Models\Project;
 use App\Models\ProjectCredentialProfile;
+use App\Models\TestCaseStep;
 use App\Models\TestRun;
 use App\Services\TestRunService;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,7 @@ class AutomationResultService
     public function __construct(
         private readonly AutomationDefinitionService $definitions,
         private readonly AutomationHealingService $healing,
+        private readonly AutomationGenerationService $generation,
         private readonly TestRunService $testRuns,
     ) {}
 
@@ -53,6 +55,14 @@ class AutomationResultService
             'base_url' => $run->base_url,
             'case_timeout_seconds' => (int) config('automation.limits.case_timeout_seconds', 120),
             'diagnostic_max_characters' => (int) config('automation.ai_healing.diagnostic_max_characters', 20000),
+            'generation' => $run->kind === AutomationRun::KIND_GENERATION ? [
+                'goal_prompt' => $run->goal_prompt,
+                'model' => $run->model,
+                'max_turns' => (int) config('automation.agentic_generation.max_turns', 30),
+                'timeout_seconds' => (int) config('automation.agentic_generation.timeout_minutes', 15) * 60,
+                'snapshot_max_characters' => (int) config('automation.agentic_generation.snapshot_max_characters', 20000),
+                'source_hash' => $run->source_hash,
+            ] : null,
             'credential_profiles' => $profiles,
             'executions' => $run->executions->map(fn (AutomationExecution $execution): array => [
                 'id' => $execution->id,
@@ -60,6 +70,15 @@ class AutomationResultService
                 'case_key' => $execution->testCase->case_key,
                 'title' => $execution->testCase->title,
                 'definition' => $execution->definition_snapshot,
+                'preconditions' => $execution->testCase->preconditions,
+                'manual_steps' => $execution->testCase->steps()
+                    ->orderBy('position')
+                    ->get()
+                    ->map(fn (TestCaseStep $step): array => [
+                        'position' => $step->position,
+                        'action' => $step->action,
+                        'expected_result' => $step->expected_result,
+                    ])->values()->all(),
             ])->values()->all(),
         ];
     }
@@ -145,7 +164,11 @@ class AutomationResultService
                 );
 
                 if (! $isHealingRevalidation && $status !== AutomationExecution::STATUS_PASSED) {
-                    $this->healing->queueIfEligible($execution->fresh(['artifacts', 'automationRun', 'automation.testCase.steps']));
+                    $failedExecution = $execution->fresh(['artifacts', 'automationRun.requester', 'automation.testCase.steps', 'testCase.project.environments']);
+
+                    if (! $this->healing->queueIfEligible($failedExecution)) {
+                        $this->generation->dispatchAgenticFallback($failedExecution);
+                    }
                 }
             }
 

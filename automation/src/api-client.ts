@@ -1,6 +1,10 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import type { ExecutionResult, RunnerPayload } from './types.js';
+import type {
+    ExecutionResult,
+    GenerationResult,
+    RunnerPayload,
+} from './types.js';
 
 interface ReservedArtifact {
     id: number;
@@ -48,6 +52,30 @@ export class RunnerApiClient {
         await this.request(
             'POST',
             `/api/runner/v1/automation-runs/${runId}/executions/${executionId}/result`,
+            result,
+        );
+    }
+
+    public async progress(
+        runId: string,
+        phase: string,
+        message?: string,
+    ): Promise<void> {
+        await this.request(
+            'POST',
+            `/api/runner/v1/automation-runs/${runId}/progress`,
+            { phase, message },
+        );
+    }
+
+    public async generationResult(
+        runId: string,
+        executionId: string,
+        result: GenerationResult,
+    ): Promise<void> {
+        await this.request(
+            'POST',
+            `/api/runner/v1/automation-runs/${runId}/executions/${executionId}/generation-result`,
             result,
         );
     }

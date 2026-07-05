@@ -178,7 +178,10 @@ class AutomationStepCompiler
         ];
     }
 
-    /** @return array{profile: string|null, field: string|null} */
+    /**
+     * @param  array<string, mixed>  $generated
+     * @return array{profile: string|null, field: string|null}
+     */
     private function secretReference(array $generated): array
     {
         $secret = $generated['secret'] ?? null;

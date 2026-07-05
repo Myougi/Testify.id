@@ -26,11 +26,14 @@ use Illuminate\Support\Carbon;
  * @property string|null $approval_source
  * @property Carbon|null $approved_at
  * @property Carbon|null $last_healed_at
+ * @property string|null $generation_source
+ * @property string|null $generation_run_id
  */
 #[Fillable([
     'test_case_id', 'driver', 'schema_version', 'status', 'definition', 'source_hash',
     'generated_at', 'last_validated_environment', 'last_validated_at', 'validation_summary',
     'approved_by', 'approval_source', 'approved_at', 'last_healed_at',
+    'generation_source', 'generation_run_id',
 ])]
 class TestCaseAutomation extends Model
 {
@@ -86,5 +89,11 @@ class TestCaseAutomation extends Model
     public function healingAttempts(): HasMany
     {
         return $this->hasMany(AutomationHealingAttempt::class);
+    }
+
+    /** @return BelongsTo<AutomationRun, $this> */
+    public function generationRun(): BelongsTo
+    {
+        return $this->belongsTo(AutomationRun::class, 'generation_run_id');
     }
 }

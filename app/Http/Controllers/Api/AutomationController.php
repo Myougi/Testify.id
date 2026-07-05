@@ -13,6 +13,7 @@ use App\Models\TestRun;
 use App\Services\AiGenerationService;
 use App\Services\Automation\AutomationDefinitionService;
 use App\Services\Automation\AutomationDispatchService;
+use App\Services\Automation\AutomationGenerationService;
 use App\Services\Automation\AutomationSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,6 +27,7 @@ class AutomationController extends Controller
     public function __construct(
         private readonly AutomationDefinitionService $definitions,
         private readonly AutomationDispatchService $dispatch,
+        private readonly AutomationGenerationService $generation,
         private readonly AutomationSettingsService $settings,
         private readonly AiGenerationService $ai,
     ) {}
@@ -78,12 +80,18 @@ class AutomationController extends Controller
 
     public function generate(Request $request, string $testCase): JsonResponse
     {
-        $result = $this->definitions->generate($this->testCase($request, $testCase));
-
-        return response()->json([
-            'data' => $this->automationPayload($result['automation']->testCase),
-            'warnings' => $result['warnings'],
+        $validated = $request->validate([
+            'environment' => ['required', 'string', Rule::in(TestRun::environments())],
+            'prompt' => ['nullable', 'string', 'max:'.config('automation.agentic_generation.prompt_max_characters', 1000)],
         ]);
+        $run = $this->generation->dispatch(
+            $this->testCase($request, $testCase),
+            $validated['environment'],
+            $request->user(),
+            $validated['prompt'] ?? null,
+        );
+
+        return response()->json(['data' => $this->runPayload($run)], 202);
     }
 
     public function update(Request $request, string $testCase): JsonResponse
@@ -205,6 +213,7 @@ class AutomationController extends Controller
             'automation.approver',
             'automation.healingAttempts.sourceExecution',
             'automation.healingAttempts.revalidationRun',
+            'automation.generationRun',
             'project.environments',
             'project.credentialProfiles',
         ]);
@@ -228,12 +237,15 @@ class AutomationController extends Controller
                 'approval_source' => $automation->approval_source,
                 'approved_at' => $this->dateTime($automation->approved_at),
                 'last_healed_at' => $this->dateTime($automation->last_healed_at),
+                'generation_source' => $automation->generation_source,
+                'generation_run_id' => $automation->generation_run_id,
                 'healing_history' => $automation->healingAttempts
                     ->sortByDesc('created_at')
                     ->take(10)
                     ->map(fn (AutomationHealingAttempt $attempt): array => $this->healingPayload($attempt))
                     ->values()->all(),
             ] : null,
+            'latest_generation' => $this->latestGenerationPayload($testCase),
             'settings' => $this->settings->payload($testCase->project),
         ];
     }
@@ -251,6 +263,11 @@ class AutomationController extends Controller
             'status' => $run->status,
             'provider_run_url' => $run->provider_run_url,
             'failure_message' => $run->failure_message,
+            'failure_code' => $run->failure_code,
+            'phase' => $run->phase,
+            'progress_message' => $run->progress_message,
+            'generation_source' => $run->generation_source,
+            'warnings' => $run->warnings ?? [],
             'started_at' => $this->dateTime($run->started_at),
             'completed_at' => $this->dateTime($run->completed_at),
             'executions' => $run->executions->map(fn (AutomationExecution $execution): array => [
@@ -272,6 +289,18 @@ class AutomationController extends Controller
                     ])->values()->all(),
             ])->all(),
         ];
+    }
+
+    /** @return array<string, mixed>|null */
+    private function latestGenerationPayload(TestCase $testCase): ?array
+    {
+        $run = AutomationRun::query()
+            ->where('kind', AutomationRun::KIND_GENERATION)
+            ->whereHas('executions', fn ($query) => $query->where('test_case_id', $testCase->id))
+            ->latest()
+            ->first();
+
+        return $run ? $this->runPayload($run) : null;
     }
 
     /** @return array<string, mixed> */

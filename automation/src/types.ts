@@ -40,18 +40,43 @@ export interface RunnerExecution {
     test_case_id: number;
     case_key: string;
     title: string;
-    definition: AutomationDefinition;
+    definition: AutomationDefinition | null;
+    preconditions: string | null;
+    manual_steps: Array<{
+        position: number;
+        action: string;
+        expected_result: string;
+    }>;
+}
+
+export interface AgenticGenerationConfig {
+    goal_prompt: string | null;
+    model: string;
+    max_turns: number;
+    timeout_seconds: number;
+    snapshot_max_characters: number;
+    source_hash: string;
 }
 
 export interface RunnerPayload {
     id: string;
-    kind: 'Validation' | 'Execution';
+    kind: 'Validation' | 'Execution' | 'Generation';
     environment: string;
     base_url: string;
     case_timeout_seconds: number;
     diagnostic_max_characters: number;
+    generation: AgenticGenerationConfig | null;
     credential_profiles: CredentialProfileMetadata[];
     executions: RunnerExecution[];
+}
+
+export interface GenerationResult {
+    success: boolean;
+    definition?: AutomationDefinition;
+    warnings: string[];
+    failure_code?: string;
+    failure_message?: string;
+    duration_ms: number;
 }
 
 export type CredentialValues = Record<string, Record<string, string>>;

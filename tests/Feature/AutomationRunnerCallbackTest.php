@@ -9,6 +9,7 @@ use App\Models\TestPlan;
 use App\Models\TestRepositoryModule;
 use App\Models\TestRun;
 use App\Models\User;
+use App\Services\Automation\AutomationDefinitionService;
 use App\Services\Automation\AutomationResultService;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
@@ -91,6 +92,54 @@ test('runner result callbacks map automation status to the test run case result'
         ->toBe(TestRun::CASE_STATUS_FAILED)
         ->and($execution->fresh()->failure_code)->toBe('assertion_failed')
         ->and($run->fresh()->status)->toBe(AutomationRun::STATUS_FAILED);
+});
+
+test('signed generation callbacks update progress and save a browser recorded draft', function (): void {
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user)->create();
+    $module = TestRepositoryModule::factory()->for($project, 'project')->create();
+    $case = TestCase::factory()->for($project, 'project')->for($module, 'module')->create();
+    $sourceHash = app(AutomationDefinitionService::class)->sourceHash($case);
+    $run = AutomationRun::factory()->for($user, 'requester')->create([
+        'kind' => AutomationRun::KIND_GENERATION,
+        'test_run_id' => null,
+        'generation_source' => AutomationRun::SOURCE_AGENTIC,
+        'source_hash' => $sourceHash,
+        'phase' => AutomationRun::PHASE_STARTING_BROWSER,
+    ]);
+    $execution = AutomationExecution::factory()->for($run, 'automationRun')->for($case)->create([
+        'definition_snapshot' => null,
+    ]);
+    signedRunnerPost($this, "/api/runner/v1/automation-runs/{$run->id}/start", '{}', 'generation-start')->assertOk();
+    $progressBody = json_encode([
+        'phase' => AutomationRun::PHASE_EXPLORING,
+        'message' => 'Exploring browser turn 1 of 30.',
+    ], JSON_THROW_ON_ERROR);
+    signedRunnerPost(
+        $this,
+        "/api/runner/v1/automation-runs/{$run->id}/progress",
+        $progressBody,
+        'generation-progress',
+    )->assertOk();
+    $resultBody = json_encode([
+        'success' => true,
+        'definition' => [
+            'version' => 1,
+            'steps' => [['action' => 'navigate', 'path' => '/login']],
+        ],
+        'warnings' => [],
+        'duration_ms' => 1500,
+    ], JSON_THROW_ON_ERROR);
+    signedRunnerPost(
+        $this,
+        "/api/runner/v1/automation-runs/{$run->id}/executions/{$execution->id}/generation-result",
+        $resultBody,
+        'generation-result',
+    )->assertOk();
+
+    expect($run->fresh()->phase)->toBe(AutomationRun::PHASE_DRAFT_RECORDED)
+        ->and($case->fresh()->automation?->generation_source)->toBe(AutomationRun::SOURCE_AGENTIC)
+        ->and($case->fresh()->automation?->last_validated_at)->toBeNull();
 });
 
 test('artifacts become visible only after size and checksum verification', function (): void {

@@ -5,9 +5,12 @@
     "scripts": {
         "build": "tsc --project tsconfig.json",
         "start": "node dist/src/index.js",
+        "generate": "node dist/src/generate.js",
         "test": "npm run build && node --test dist/tests/**/*.test.js"
     },
     "dependencies": {
+        "@modelcontextprotocol/sdk": "1.29.0",
+        "@playwright/mcp": "0.0.77",
         "playwright": "1.55.1"
     },
     "devDependencies": {
