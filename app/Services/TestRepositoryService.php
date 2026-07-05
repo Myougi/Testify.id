@@ -6,7 +6,6 @@ use App\Models\Project;
 use App\Models\TestCase;
 use App\Models\TestRepositoryModule;
 use App\Models\User;
-use App\Services\Automation\AutomationDefinitionService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -15,8 +14,6 @@ use Illuminate\Validation\ValidationException;
 
 class TestRepositoryService
 {
-    public function __construct(private readonly AutomationDefinitionService $automationDefinitionService) {}
-
     /**
      * @param  array<string, mixed>  $filters
      * @return LengthAwarePaginator<int, TestCase>
@@ -214,8 +211,7 @@ class TestRepositoryService
                 $testCase->increment('api_version');
             }
 
-            $testCase->load(['project', 'module', 'steps', 'automation']);
-            $this->automationDefinitionService->invalidateIfChanged($testCase);
+            $testCase->load(['project', 'module', 'steps']);
 
             return $testCase;
         });

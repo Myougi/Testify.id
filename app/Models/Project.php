@@ -74,16 +74,4 @@ class Project extends Model
     {
         return $this->hasMany(Issue::class, 'project_id', 'project_id');
     }
-
-    /** @return HasMany<ProjectEnvironment, $this> */
-    public function environments(): HasMany
-    {
-        return $this->hasMany(ProjectEnvironment::class, 'project_id', 'project_id');
-    }
-
-    /** @return HasMany<ProjectCredentialProfile, $this> */
-    public function credentialProfiles(): HasMany
-    {
-        return $this->hasMany(ProjectCredentialProfile::class, 'project_id', 'project_id');
-    }
 }

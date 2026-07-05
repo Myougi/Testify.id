@@ -74,9 +74,6 @@ class AppServiceProvider extends ServiceProvider
             (int) config('api.rate_limits.write', 60),
         )->by((string) $request->user()->id));
 
-        RateLimiter::for('automation-runner', fn (Request $request): Limit => Limit::perMinute(
-            (int) config('automation.runner.rate_limit_per_minute', 120),
-        )->by((string) $request->ip()));
     }
 
     private function configureAiEventLogging(): void

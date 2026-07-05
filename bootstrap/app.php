@@ -6,7 +6,6 @@ use App\Http\Middleware\Api\V1\EnsureJsonApi;
 use App\Http\Middleware\Api\V1\EnsureTokenAbility;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
-use App\Http\Middleware\VerifyAutomationRunnerSignature;
 use App\Support\Api\V1\JsonApi;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -33,7 +32,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'api.json' => EnsureJsonApi::class,
             'api.ability' => EnsureTokenAbility::class,
             'api.sparse-fields' => ApplySparseFields::class,
-            'automation.runner' => VerifyAutomationRunnerSignature::class,
         ]);
 
         $middleware->web(append: [

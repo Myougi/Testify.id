@@ -6,7 +6,6 @@ use App\Models\TestCase;
 use App\Models\TestPlan;
 use App\Models\TestRun;
 use App\Models\User;
-use App\Services\Automation\AutomationDispatchService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -14,8 +13,6 @@ use Illuminate\Validation\ValidationException;
 
 class TestRunService
 {
-    public function __construct(private readonly AutomationDispatchService $automationDispatchService) {}
-
     /**
      * @param  array<string, mixed>  $filters
      * @return LengthAwarePaginator<int, TestRun>
@@ -161,8 +158,6 @@ class TestRunService
             ]);
         }
 
-        $this->automationDispatchService->assertCanStart($testRun);
-
         DB::transaction(function () use ($testRun): void {
             if (TestRun::normalizeStatus($testRun->status) === TestRun::STATUS_NEW) {
                 $testRun->forceFill([
@@ -174,8 +169,6 @@ class TestRunService
                     'execution_started_at' => now(),
                 ])->save();
             }
-
-            $this->automationDispatchService->dispatchForTestRun($testRun);
         });
 
         return $this->getDetail($testRun->fresh());

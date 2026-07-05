@@ -21,7 +21,6 @@
     import ShieldCheck from 'lucide-svelte/icons/shield-check';
     import { toast } from 'svelte-sonner';
     import AppHead from '@/components/AppHead.svelte';
-    import AutomationRunsPanel from '@/components/test-executions/AutomationRunsPanel.svelte';
     import { Spinner } from '@/components/ui/spinner';
     import { updateTestRunCaseStatus } from '@/lib/api/testRuns';
     import type {
@@ -367,8 +366,6 @@
                 </article>
             {/each}
         </section>
-
-        <AutomationRunsPanel testRunId={testRun.id} />
 
         <section class="rounded-lg border border-slate-200 bg-white shadow-sm">
             <div class="grid gap-5 px-5 py-5 md:grid-cols-4">

@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Api\AiGenerationController;
-use App\Http\Controllers\Api\AutomationController;
 use App\Http\Controllers\Api\IssueController;
 use App\Http\Controllers\Api\TestCaseController;
 use App\Http\Controllers\Api\TestPlanController;
@@ -56,17 +55,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('ai/generate', [AiGenerationController::class, 'store'])
             ->name('ai.generate')
             ->middleware('throttle:api-write');
-        Route::get('projects/{project}/automation-settings', [AutomationController::class, 'settings']);
-        Route::put('projects/{project}/automation-settings', [AutomationController::class, 'updateSettings']);
-        Route::get('test-cases/{testCase}/automation', [AutomationController::class, 'show']);
-        Route::get('test-cases/{testCase}/automation/healing-attempts', [AutomationController::class, 'healingHistory']);
-        Route::put('test-cases/{testCase}/automation', [AutomationController::class, 'update']);
-        Route::post('test-cases/{testCase}/automation/generate', [AutomationController::class, 'generate']);
-        Route::post('test-cases/{testCase}/automation/validate', [AutomationController::class, 'validateDefinition']);
-        Route::post('test-cases/{testCase}/automation/approve', [AutomationController::class, 'approve']);
-        Route::get('test-runs/{testRun}/automation-runs', [AutomationController::class, 'runs']);
-        Route::post('test-runs/{testRun}/automation-runs/retry', [AutomationController::class, 'retry']);
-        Route::post('automation-executions/{execution}/issue-draft', [AutomationController::class, 'issueDraft']);
         Route::apiResource('issues', IssueController::class)->only([
             'index',
             'store',
@@ -107,8 +95,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('test-plans/{test_plan}/test-cases/{testCase}', [TestPlanController::class, 'detachTestCase'])
             ->name('test-plans.detach-test-case');
     });
-    Route::get('automation-artifacts/{artifact}', [AutomationController::class, 'artifact'])
-        ->name('automation-artifacts.download');
 });
 
 require __DIR__.'/settings.php';

@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
@@ -196,11 +195,5 @@ class TestCase extends Model
     public function test_runs(): BelongsToMany
     {
         return $this->testRuns();
-    }
-
-    /** @return HasOne<TestCaseAutomation, $this> */
-    public function automation(): HasOne
-    {
-        return $this->hasOne(TestCaseAutomation::class);
     }
 }
