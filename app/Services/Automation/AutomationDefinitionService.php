@@ -40,23 +40,33 @@ class AutomationDefinitionService
             ])->all(),
             'credential_profiles' => $profiles,
         ];
-        $structured = $this->generateStructured($context);
+        $structured = [];
+        $lastException = null;
+        $attempts = 3;
 
-        try {
-            $definition = $this->compileAndValidate(
-                is_array($structured['definition'] ?? null) ? $structured['definition'] : [],
-                $profiles,
-            );
-        } catch (ValidationException $exception) {
-            $structured = $this->generateStructured([
-                ...$context,
-                'previous_output' => $structured['definition'] ?? null,
-                'correction_errors' => $exception->errors(),
-            ], 'Correct the previous output using every compiler error. Return a complete replacement definition.');
-            $definition = $this->compileAndValidate(
-                is_array($structured['definition'] ?? null) ? $structured['definition'] : [],
-                $profiles,
-            );
+        for ($attempt = 0; $attempt < $attempts; $attempt++) {
+            $structured = $attempt === 0
+                ? $this->generateStructured($context)
+                : $this->generateStructured([
+                    ...$context,
+                    'previous_output' => $structured['definition'] ?? null,
+                    'correction_errors' => $lastException?->errors(),
+                ], 'Correct the previous output using every compiler error. Return a complete replacement definition.');
+
+            try {
+                $definition = $this->compileAndValidate(
+                    is_array($structured['definition'] ?? null) ? $structured['definition'] : [],
+                    $profiles,
+                );
+
+                break;
+            } catch (ValidationException $exception) {
+                $lastException = $exception;
+
+                if ($attempt === $attempts - 1) {
+                    throw $exception;
+                }
+            }
         }
 
         $automation = $this->save($testCase, $definition, generated: true);

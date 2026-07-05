@@ -154,6 +154,7 @@ export class TestRunApiError extends Error {
         message: string,
         status: number,
         errors: Record<string, string> = {},
+        public code: string | null = null,
     ) {
         super(message);
 

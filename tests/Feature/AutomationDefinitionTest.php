@@ -67,6 +67,38 @@ test('generated playwright steps compile to exact action fields', function (): v
     ]);
 });
 
+test('compiler accepts already-shaped dsl locator and value fields', function (): void {
+    $compiler = app(AutomationStepCompiler::class);
+    $definition = $compiler->compileDefinition([
+        'version' => 1,
+        'steps' => [
+            [
+                'action' => 'fill',
+                'locator' => ['by' => 'label', 'value' => 'Username'],
+                'value' => 'standard_user',
+            ],
+            [
+                'action' => 'assert_text',
+                'locator' => ['by' => 'role', 'role' => 'heading', 'name' => 'Dashboard'],
+                'value' => 'Dashboard',
+            ],
+        ],
+    ]);
+
+    expect($definition['steps'])->toBe([
+        [
+            'action' => 'fill',
+            'locator' => ['by' => 'label', 'value' => 'Username'],
+            'value' => 'standard_user',
+        ],
+        [
+            'action' => 'assert_text',
+            'locator' => ['by' => 'role', 'role' => 'heading', 'name' => 'Dashboard'],
+            'value' => 'Dashboard',
+        ],
+    ]);
+});
+
 test('automation ai agents use the configured timeout', function (): void {
     config()->set('automation.ai.timeout_seconds', 180);
     config()->set('automation.ai_healing.timeout_seconds', 180);
@@ -182,6 +214,48 @@ test('automation generation corrects validator errors once', function (): void {
     expect($result['automation']->definition['steps'])->toBe([
         ['action' => 'navigate', 'path' => '/login'],
     ]);
+});
+
+test('automation generation retries correction more than once when needed', function (): void {
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user)->create();
+    $module = TestRepositoryModule::factory()->for($project, 'project')->create();
+    $case = TestCase::factory()->for($project, 'project')->for($module, 'module')->create();
+    TestCaseStep::factory()->for($case)->create([
+        'position' => 1,
+        'action' => 'Open the login page.',
+        'expected_result' => 'The login page is displayed.',
+    ]);
+
+    AutomationDefinitionAgent::fake([
+        [
+            'definition' => [
+                'version' => 1,
+                'steps' => [['action' => 'navigate', 'path' => 'https://attacker.example/login']],
+            ],
+            'warnings' => [],
+        ],
+        [
+            'definition' => [
+                'version' => 1,
+                'steps' => [['action' => 'navigate']],
+            ],
+            'warnings' => [],
+        ],
+        [
+            'definition' => [
+                'version' => 1,
+                'steps' => [['action' => 'navigate', 'path' => '/login']],
+            ],
+            'warnings' => ['Used the relative login path after correction.'],
+        ],
+    ])->preventStrayPrompts();
+
+    $result = app(AutomationDefinitionService::class)->generate($case);
+
+    expect($result['automation']->definition['steps'])->toBe([
+        ['action' => 'navigate', 'path' => '/login'],
+    ])->and($result['warnings'])->toBe(['Used the relative login path after correction.']);
 });
 
 test('failed validation can heal revalidate and become ready automatically', function (): void {

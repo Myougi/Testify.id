@@ -20,6 +20,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class AutomationController extends Controller
 {
@@ -108,14 +110,28 @@ class AutomationController extends Controller
         JsonApi::assertType($request, 'automation-generation-requests');
         $case = $this->testCase($request, $testCase);
 
-        return $this->idempotency->execute($request, function () use ($request, $case): JsonResponse {
-            $result = $this->definitions->generate($case);
-            $this->audit->record($request, 'automation.generated', 'test-case-automations', $result['automation'], after: [
-                'warnings' => $result['warnings'],
-            ]);
+        try {
+            return $this->idempotency->execute($request, function () use ($request, $case): JsonResponse {
+                $result = $this->definitions->generate($case);
+                $this->audit->record($request, 'automation.generated', 'test-case-automations', $result['automation'], after: [
+                    'warnings' => $result['warnings'],
+                ]);
 
-            return $this->resource($result['automation'], 201, ['warnings' => $result['warnings']]);
-        }, $request->user());
+                return $this->resource($result['automation'], 201, ['warnings' => $result['warnings']]);
+            }, $request->user());
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return JsonApi::error(
+                $request,
+                500,
+                'automation_generation_failed',
+                'Automation Generation Failed',
+                $this->failureMessage('generate', $exception),
+            );
+        }
     }
 
     public function update(Request $request, string $testCase): JsonResponse
@@ -143,16 +159,30 @@ class AutomationController extends Controller
         ])->validate()['environment'];
         $case = $this->testCase($request, $testCase);
 
-        return $this->idempotency->execute($request, function () use ($request, $case, $environment): JsonResponse {
-            $run = $this->dispatch->dispatchValidation($case->automation()->firstOrFail(), $environment, $request->user());
-            $this->audit->record($request, 'automation.validation_dispatched', 'automation-runs', $run);
+        try {
+            return $this->idempotency->execute($request, function () use ($request, $case, $environment): JsonResponse {
+                $run = $this->dispatch->dispatchValidation($case->automation()->firstOrFail(), $environment, $request->user());
+                $this->audit->record($request, 'automation.validation_dispatched', 'automation-runs', $run);
 
-            return JsonApi::resource([
-                'type' => 'automation-runs',
-                'id' => $run->id,
-                'attributes' => ['kind' => $run->kind, 'status' => $run->status, 'environment' => $run->environment],
-            ], 202);
-        }, $request->user());
+                return JsonApi::resource([
+                    'type' => 'automation-runs',
+                    'id' => $run->id,
+                    'attributes' => ['kind' => $run->kind, 'status' => $run->status, 'environment' => $run->environment],
+                ], 202);
+            }, $request->user());
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return JsonApi::error(
+                $request,
+                500,
+                'automation_validation_failed',
+                'Automation Validation Failed',
+                $this->failureMessage('validate', $exception),
+            );
+        }
     }
 
     public function approve(Request $request, string $testCase): JsonResponse
@@ -276,5 +306,20 @@ class AutomationController extends Controller
         }
 
         return Carbon::parse($value)->utc()->toIso8601String();
+    }
+
+    private function failureMessage(string $operation, Throwable $exception): string
+    {
+        $message = trim($exception->getMessage());
+        $prefix = match ($operation) {
+            'validate' => 'Automation validation failed',
+            default => 'Automation generation failed',
+        };
+
+        if ($message === '') {
+            return $prefix.'. Please try again.';
+        }
+
+        return $prefix.': '.$message;
     }
 }

@@ -112,6 +112,7 @@ export class AutomationApiError extends Error {
         message: string,
         public status: number,
         public errors: Record<string, string> = {},
+        public code: string | null = null,
     ) {
         super(message);
         this.name = 'AutomationApiError';

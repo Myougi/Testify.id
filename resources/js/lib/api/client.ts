@@ -1,14 +1,25 @@
 type JsonErrorBody = {
     message?: string;
-    errors?: Record<string, string[]>;
+    errors?: Record<string, string[]> | JsonApiError[];
     code?: string;
     login_url?: string;
+};
+
+type JsonApiError = {
+    status?: string;
+    code?: string;
+    title?: string;
+    detail?: string;
+    source?: {
+        pointer?: string;
+    };
 };
 
 export type ApiErrorConstructor<T extends Error> = new (
     message: string,
     status: number,
     errors: Record<string, string>,
+    code?: string,
 ) => T;
 
 export type FileDownload = {
@@ -59,6 +70,68 @@ const errorBody = async (response: Response): Promise<JsonErrorBody> => {
     }
 };
 
+const jsonApiErrors = (body: JsonErrorBody): JsonApiError[] =>
+    Array.isArray(body.errors) ? body.errors : [];
+
+const jsonApiMessage = (body: JsonErrorBody, fallback: string): string => {
+    const firstError = jsonApiErrors(body)[0];
+
+    return (
+        body.message ??
+        firstError?.detail ??
+        firstError?.title ??
+        fallback
+    );
+};
+
+const pointerToField = (pointer: string | undefined): string | null => {
+    if (!pointer?.startsWith('/data/attributes/')) {
+        return null;
+    }
+
+    return pointer
+        .slice('/data/attributes/'.length)
+        .replaceAll('/', '.');
+};
+
+const toErrorBag = (
+    errors?: Record<string, string[]> | JsonApiError[],
+): Record<string, string> => {
+    if (Array.isArray(errors)) {
+        return Object.fromEntries(
+            errors
+                .map((error) => {
+                    const field = pointerToField(error.source?.pointer);
+
+                    if (!field) {
+                        return null;
+                    }
+
+                    return [
+                        field,
+                        error.detail ?? error.title ?? 'Invalid value.',
+                    ] as const;
+                })
+                .filter((entry): entry is readonly [string, string] => entry !== null),
+        );
+    }
+
+    return Object.fromEntries(
+        Object.entries(errors ?? {}).map(([key, value]) => [
+            key,
+            Array.isArray(value) && value.length > 0
+                ? value[0]
+                : 'Invalid value.',
+        ]),
+    );
+};
+
+const responseCode = (body: JsonErrorBody): string | undefined => {
+    const firstError = jsonApiErrors(body)[0];
+
+    return body.code ?? firstError?.code;
+};
+
 const redirectToLogin = async (response: Response): Promise<void> => {
     const body = await errorBody(response);
 
@@ -100,18 +173,6 @@ const fetchWithCsrfRecovery = async (
 
     return retryResponse;
 };
-
-const toErrorBag = (
-    errors?: Record<string, string[]>,
-): Record<string, string> =>
-    Object.fromEntries(
-        Object.entries(errors ?? {}).map(([key, value]) => [
-            key,
-            Array.isArray(value) && value.length > 0
-                ? value[0]
-                : 'Invalid value.',
-        ]),
-    );
 
 const responseFilename = (response: Response): string | null => {
     const disposition = response.headers.get('Content-Disposition');
@@ -176,9 +237,10 @@ export async function requestJson<T, TError extends Error>(
         }
 
         throw new ErrorType(
-            body.message ?? fallbackMessage,
+            jsonApiMessage(body, fallbackMessage),
             response.status,
             toErrorBag(body.errors),
+            responseCode(body),
         );
     }
 
@@ -217,9 +279,10 @@ export async function requestFormData<T, TError extends Error>(
         }
 
         throw new ErrorType(
-            errorBody.message ?? fallbackMessage,
+            jsonApiMessage(errorBody, fallbackMessage),
             response.status,
             toErrorBag(errorBody.errors),
+            responseCode(errorBody),
         );
     }
 
@@ -255,9 +318,10 @@ export async function requestFile<TError extends Error>(
         }
 
         throw new ErrorType(
-            body.message ?? fallbackMessage,
+            jsonApiMessage(body, fallbackMessage),
             response.status,
             toErrorBag(body.errors),
+            responseCode(body),
         );
     }
 

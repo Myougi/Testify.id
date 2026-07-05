@@ -82,7 +82,7 @@ class AutomationStepCompiler
             'assert_text', 'assert_value' => [
                 'action' => $action,
                 'locator' => $this->compileLocator($generated, $pointer),
-                'value' => $this->requiredString($generated['literal_value'] ?? null, $pointer.'.literal_value'),
+                'value' => $this->requiredString($generated['value'] ?? $generated['literal_value'] ?? null, $pointer.'.value'),
             ],
             default => [
                 'action' => $action,
@@ -96,9 +96,10 @@ class AutomationStepCompiler
      */
     private function compileInputStep(array $generated, string $action, string $pointer): array
     {
-        $literal = $this->nullableString($generated['literal_value'] ?? null);
-        $profile = $this->nullableString($generated['secret_profile'] ?? null);
-        $field = $this->nullableString($generated['secret_field'] ?? null);
+        $literal = $this->nullableString($generated['value'] ?? $generated['literal_value'] ?? null);
+        $secret = $this->secretReference($generated);
+        $profile = $secret['profile'] ?? null;
+        $field = $secret['field'] ?? null;
         $hasLiteral = $literal !== null;
         $hasSecret = $profile !== null || $field !== null;
 
@@ -122,6 +123,12 @@ class AutomationStepCompiler
      */
     private function compileLocator(array $generated, string $pointer): array
     {
+        $locator = $generated['locator'] ?? null;
+
+        if (is_array($locator) && ! array_is_list($locator)) {
+            return $this->compileExistingLocator($locator, $pointer);
+        }
+
         $by = $this->requiredString($generated['locator_by'] ?? null, $pointer.'.locator_by');
 
         if (! in_array($by, self::LOCATORS, true)) {
@@ -144,8 +151,57 @@ class AutomationStepCompiler
         ];
     }
 
+    /** @param array<string, mixed> $locator
+     * @return array<string, string>
+     */
+    private function compileExistingLocator(array $locator, string $pointer): array
+    {
+        $by = $this->requiredString($locator['by'] ?? null, $pointer.'.by');
+
+        if (! in_array($by, self::LOCATORS, true)) {
+            throw ValidationException::withMessages([$pointer.'.by' => 'The generated locator strategy is not supported.']);
+        }
+
+        if ($by === 'role') {
+            $compiled = [
+                'by' => 'role',
+                'role' => $this->requiredString($locator['role'] ?? null, $pointer.'.role'),
+            ];
+            $name = $this->nullableString($locator['name'] ?? null);
+
+            return $name === null ? $compiled : [...$compiled, 'name' => $name];
+        }
+
+        return [
+            'by' => $by,
+            'value' => $this->requiredString($locator['value'] ?? null, $pointer.'.value'),
+        ];
+    }
+
+    /** @return array{profile: string|null, field: string|null} */
+    private function secretReference(array $generated): array
+    {
+        $secret = $generated['secret'] ?? null;
+
+        if (is_array($secret) && ! array_is_list($secret)) {
+            return [
+                'profile' => $this->nullableString($secret['profile'] ?? null),
+                'field' => $this->nullableString($secret['field'] ?? null),
+            ];
+        }
+
+        return [
+            'profile' => $this->nullableString($generated['secret_profile'] ?? null),
+            'field' => $this->nullableString($generated['secret_field'] ?? null),
+        ];
+    }
+
     private function milliseconds(mixed $value, string $pointer): int
     {
+        if (is_string($value) && is_numeric($value)) {
+            $value = (int) $value;
+        }
+
         if (! is_int($value) || $value < 0 || $value > 10000) {
             throw ValidationException::withMessages([$pointer => 'Generated waits must be between 0 and 10000 milliseconds.']);
         }

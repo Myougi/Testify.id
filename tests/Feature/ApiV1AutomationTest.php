@@ -5,10 +5,12 @@ use App\Models\AutomationHealingAttempt;
 use App\Models\AutomationRun;
 use App\Models\Project;
 use App\Models\TestCase;
+use App\Models\TestCaseStep;
 use App\Models\TestRepositoryModule;
 use App\Models\TestRun;
 use App\Models\User;
 use App\Services\Automation\AutomationDefinitionService;
+use App\Services\Automation\AutomationDispatchService;
 use App\Support\Api\V1\JsonApi;
 use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
@@ -80,6 +82,61 @@ test('api v1 automation resources enforce abilities ownership and etags', functi
     ])->assertOk()
         ->assertJsonPath('data.attributes.environments.1.environment', TestRun::ENVIRONMENT_SIT)
         ->assertJsonPath('data.attributes.environments.1.base_url', 'https://sit.example.test');
+});
+
+test('automation generate and validate endpoints return detailed failure messages on server errors', function (): void {
+    $user = User::factory()->create();
+    $project = Project::factory()->for($user)->create();
+    $module = TestRepositoryModule::factory()->for($project, 'project')->create();
+    $case = TestCase::factory()->for($project, 'project')->for($module, 'module')->create();
+    TestCaseStep::factory()->for($case)->create([
+        'position' => 1,
+        'action' => 'Open the login page.',
+        'expected_result' => 'The login page is displayed.',
+    ]);
+    app(AutomationDefinitionService::class)->save($case, [
+        'version' => 1,
+        'steps' => [[
+            'action' => 'navigate',
+            'path' => '/',
+        ]],
+    ]);
+    Sanctum::actingAs($user, ['automations:write']);
+
+    $this->partialMock(AutomationDefinitionService::class, function ($mock): void {
+        $mock->shouldReceive('generate')
+            ->once()
+            ->andThrow(new RuntimeException('OpenRouter returned malformed structured output.'));
+    });
+
+    apiJson($this, 'POST', "/api/v1/test-cases/{$case->id}/automation/generate", [
+        'data' => ['type' => 'automation-generation-requests'],
+    ], [
+        'Accept' => AUTOMATION_JSON_API,
+        'Content-Type' => AUTOMATION_JSON_API,
+        'Idempotency-Key' => 'automation-generate-failure',
+    ])->assertStatus(500)
+        ->assertJsonPath('errors.0.code', 'automation_generation_failed')
+        ->assertJsonPath('errors.0.detail', 'Automation generation failed: OpenRouter returned malformed structured output.');
+
+    $this->partialMock(AutomationDispatchService::class, function ($mock): void {
+        $mock->shouldReceive('dispatchValidation')
+            ->once()
+            ->andThrow(new RuntimeException('GitHub workflow dispatch failed with status 500.'));
+    });
+
+    apiJson($this, 'POST', "/api/v1/test-cases/{$case->id}/automation/validate", [
+        'data' => [
+            'type' => 'automation-validation-requests',
+            'attributes' => ['environment' => TestRun::ENVIRONMENT_SIT],
+        ],
+    ], [
+        'Accept' => AUTOMATION_JSON_API,
+        'Content-Type' => AUTOMATION_JSON_API,
+        'Idempotency-Key' => 'automation-validate-failure',
+    ])->assertStatus(500)
+        ->assertJsonPath('errors.0.code', 'automation_validation_failed')
+        ->assertJsonPath('errors.0.detail', 'Automation validation failed: GitHub workflow dispatch failed with status 500.');
 });
 
 /** @return array<string, mixed> */
