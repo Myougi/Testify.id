@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\TestRunCollection;
 use App\Http\Resources\TestRunResource;
 use App\Models\TestRun;
+use App\Services\ProjectAccessService;
 use App\Services\TestRunService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -14,7 +15,10 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class TestRunPageController extends Controller
 {
-    public function __construct(public TestRunService $testRunService) {}
+    public function __construct(
+        public TestRunService $testRunService,
+        public ProjectAccessService $projectAccessService,
+    ) {}
 
     /**
      * Display a listing of the resource.
@@ -95,8 +99,8 @@ class TestRunPageController extends Controller
             return null;
         }
 
-        $projectExists = $request->user()
-            ->projects()
+        $projectExists = $this->projectAccessService
+            ->accessibleProjectsQuery($request->user())
             ->whereKey((int) $activeProjectId)
             ->exists();
 

@@ -18,15 +18,20 @@
     import { Input } from '@/components/ui/input';
     import { Label } from '@/components/ui/label';
     import { Spinner } from '@/components/ui/spinner';
+    import { register } from '@/routes';
     import { store } from '@/routes/login';
     import { request } from '@/routes/password';
 
     let {
         status = '',
         canResetPassword,
+        email = '',
+        redirect = '',
     }: {
         status?: string;
         canResetPassword: boolean;
+        email?: string;
+        redirect?: string;
     } = $props();
 </script>
 
@@ -41,7 +46,8 @@
 {/if}
 
 <Form
-    {...store.form()}
+    action={store.url()}
+    method="post"
     resetOnSuccess={['password']}
     class="flex flex-col gap-6"
 >
@@ -77,6 +83,7 @@
                     required
                     autocomplete="email"
                     placeholder="email@example.com"
+                    value={email}
                     class="h-12 rounded-2xl border-slate-200 bg-white px-4 text-base shadow-none focus-visible:ring-[3px] dark:border-white/10 dark:bg-slate-900"
                 />
                 <InputError message={errors.email} />
@@ -135,8 +142,25 @@
                 Log in
             </Button>
 
+            {#if redirect}
+                <input type="hidden" name="redirect" value={redirect} />
+            {/if}
+
             <p class="text-center text-sm leading-6 text-muted-foreground">
                 Protected with session security and rate limiting by default.
+            </p>
+
+            <p class="text-center text-sm leading-6 text-muted-foreground">
+                New to Testify?
+                <TextLink
+                    href={register({
+                        query: {
+                            ...(email ? { email } : {}),
+                        },
+                    })}
+                >
+                    Create an account
+                </TextLink>
             </p>
         </div>
     {/snippet}

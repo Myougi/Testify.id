@@ -41,7 +41,10 @@ class GenerateAiDraftRequest extends FormRequest
             'project_id' => [
                 'nullable',
                 'integer',
-                Rule::exists('projects', 'project_id')->where('user_id', $this->user()?->id),
+                Rule::exists('projects', 'project_id')->whereIn(
+                    'project_id',
+                    $this->accessibleProjectIds(),
+                ),
             ],
             'test_plan_id' => ['nullable', 'integer'],
             'test_run_id' => ['nullable', 'integer'],
@@ -56,5 +59,17 @@ class GenerateAiDraftRequest extends FormRequest
             'report_filters.sections' => ['nullable', 'array'],
             'report_filters.sections.*' => ['nullable', 'string', 'max:50'],
         ];
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function accessibleProjectIds(): array
+    {
+        return $this->user()
+            ?->accessibleProjects()
+            ->pluck('project_id')
+            ->map(fn (mixed $projectId): int => (int) $projectId)
+            ->all() ?? [];
     }
 }

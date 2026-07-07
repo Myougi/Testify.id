@@ -9,6 +9,7 @@
     import { edit as editAppearance } from '@/routes/appearance';
     import { edit as editProfile } from '@/routes/profile';
     import { edit as editSecurity } from '@/routes/security';
+    import { index as teamsIndex } from '@/routes/teams';
     import type { NavItem } from '@/types';
 
     let {
@@ -30,9 +31,14 @@
             title: 'Appearance',
             href: editAppearance(),
         },
+        {
+            title: 'Teams',
+            href: teamsIndex(),
+        },
     ];
 
     const url = currentUrlState();
+    const isTeamsPage = $derived(url.currentUrl === '/teams');
 </script>
 
 <div class="px-4 py-6">
@@ -70,8 +76,8 @@
 
         <Separator class="my-6 lg:hidden" />
 
-        <div class="flex-1 md:max-w-2xl">
-            <section class="max-w-xl space-y-12">
+        <div class={`flex-1 ${isTeamsPage ? 'md:max-w-5xl' : 'md:max-w-2xl'}`}>
+            <section class={`${isTeamsPage ? 'max-w-5xl space-y-8' : 'max-w-xl space-y-12'}`}>
                 {@render children?.()}
             </section>
         </div>

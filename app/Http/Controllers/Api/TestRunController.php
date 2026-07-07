@@ -10,6 +10,7 @@ use App\Http\Resources\TestRunCollection;
 use App\Http\Resources\TestRunResource;
 use App\Models\TestCase;
 use App\Models\TestRun;
+use App\Services\ProjectAccessService;
 use App\Services\TestRunService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,7 +19,10 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class TestRunController extends Controller
 {
-    public function __construct(public TestRunService $testRunService) {}
+    public function __construct(
+        public TestRunService $testRunService,
+        public ProjectAccessService $projectAccessService,
+    ) {}
 
     /**
      * Display a listing of the resource.
@@ -165,8 +169,8 @@ class TestRunController extends Controller
             return null;
         }
 
-        $projectExists = $request->user()
-            ->projects()
+        $projectExists = $this->projectAccessService
+            ->accessibleProjectsQuery($request->user())
             ->whereKey((int) $activeProjectId)
             ->exists();
 

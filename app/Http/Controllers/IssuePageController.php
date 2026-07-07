@@ -7,6 +7,7 @@ use App\Http\Resources\IssueResource;
 use App\Models\Issue;
 use App\Models\Project;
 use App\Services\IssueService;
+use App\Services\ProjectAccessService;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
@@ -15,9 +16,10 @@ use Inertia\Response;
 
 class IssuePageController extends Controller
 {
-    public function __construct(public IssueService $issueService)
-    {
-    }
+    public function __construct(
+        public IssueService $issueService,
+        public ProjectAccessService $projectAccessService,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -94,8 +96,8 @@ class IssuePageController extends Controller
             return null;
         }
 
-        return $request->user()
-            ->projects()
+        return $this->projectAccessService
+            ->accessibleProjectsQuery($request->user())
             ->whereKey((int) $activeProjectId)
             ->first();
     }

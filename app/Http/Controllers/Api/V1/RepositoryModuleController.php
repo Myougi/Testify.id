@@ -2,8 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Models\Project;
 use App\Models\TestRepositoryModule;
+use App\Services\Api\V1\AuditService;
+use App\Services\Api\V1\IdempotencyService;
 use App\Services\TestRepositoryService;
 use App\Support\Api\V1\JsonApi;
 use App\Support\Api\V1\ResourceSerializer;
@@ -14,8 +15,8 @@ use Illuminate\Validation\Rule;
 class RepositoryModuleController extends Controller
 {
     public function __construct(
-        \App\Services\Api\V1\AuditService $audit,
-        \App\Services\Api\V1\IdempotencyService $idempotency,
+        AuditService $audit,
+        IdempotencyService $idempotency,
         private readonly TestRepositoryService $repositoryService,
     ) {
         parent::__construct($audit, $idempotency);
@@ -24,7 +25,7 @@ class RepositoryModuleController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = TestRepositoryModule::query()
-            ->whereIn('project_id', $request->user()->projects()->select('project_id'));
+            ->whereIn('project_id', $request->user()->accessibleProjects()->select('project_id'));
 
         if ($project = $request->input('filter.project')) {
             $query->where('project_id', $project);
@@ -91,7 +92,7 @@ class RepositoryModuleController extends Controller
     private function find(Request $request, string $id): TestRepositoryModule
     {
         return TestRepositoryModule::query()
-            ->whereIn('project_id', $request->user()->projects()->select('project_id'))
+            ->whereIn('project_id', $request->user()->accessibleProjects()->select('project_id'))
             ->whereKey($id)
             ->firstOrFail();
     }
@@ -113,7 +114,7 @@ class RepositoryModuleController extends Controller
             'project_id' => [
                 $presence,
                 'integer',
-                Rule::exists('projects', 'project_id')->where('user_id', $request->user()->id)->whereNull('deleted_at'),
+                Rule::exists('projects', 'project_id')->whereNull('deleted_at'),
             ],
             'parent_id' => ['nullable', 'integer', 'different:id', Rule::exists('test_repository_modules', 'id')->where('project_id', $projectId)->whereNull('deleted_at')],
             'name' => [$presence, 'string', 'max:255'],

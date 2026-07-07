@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateProjectRequest;
 use App\Models\Issue;
 use App\Models\Project;
 use App\Models\TestPlan;
+use App\Services\ProjectAccessService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -15,6 +16,8 @@ use Inertia\Response;
 
 class ProjectController extends Controller
 {
+    public function __construct(public ProjectAccessService $projectAccessService) {}
+
     /**
      * Display a listing of the resource.
      */
@@ -22,7 +25,10 @@ class ProjectController extends Controller
     {
         Gate::authorize('viewAny', Project::class);
 
-        $projectsQuery = $request->user()->projects()->latest();
+        $projectsQuery = $this->projectAccessService
+            ->accessibleProjectsQuery($request->user())
+            ->latest();
+        $ownerId = $request->user()->id;
         $status = $request->string('status')->lower()->toString();
 
         $counts = [
@@ -61,9 +67,10 @@ class ProjectController extends Controller
                 'project_description',
                 'project_url',
                 'project_status',
+                'user_id',
                 'created_at',
             ])
-            ->each(function (Project $project): void {
+            ->each(function (Project $project) use ($ownerId): void {
                 $project->setAttribute(
                     'execution_progress',
                     $project->test_plans_count === 0
@@ -71,6 +78,11 @@ class ProjectController extends Controller
                         : (int) round(
                             ($project->completed_test_plans_count / $project->test_plans_count) * 100
                         ),
+                );
+                $project->setAttribute('is_owned', $project->user_id === $ownerId);
+                $project->setAttribute(
+                    'access_type',
+                    $project->user_id === $ownerId ? 'owned' : 'shared',
                 );
             });
 

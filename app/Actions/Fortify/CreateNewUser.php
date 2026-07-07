@@ -1,0 +1,31 @@
+<?php
+
+namespace App\Actions\Fortify;
+
+use App\Concerns\PasswordValidationRules;
+use App\Concerns\ProfileValidationRules;
+use App\Models\User;
+use Illuminate\Support\Facades\Validator;
+use Laravel\Fortify\Contracts\CreatesNewUsers;
+
+class CreateNewUser implements CreatesNewUsers
+{
+    use PasswordValidationRules, ProfileValidationRules;
+
+    /**
+     * @param  array<string, mixed>  $input
+     */
+    public function create(array $input): User
+    {
+        $validated = Validator::make($input, [
+            ...$this->profileRules(),
+            'password' => $this->passwordRules(),
+        ])->validate();
+
+        return User::query()->create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => $validated['password'],
+        ]);
+    }
+}

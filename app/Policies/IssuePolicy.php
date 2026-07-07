@@ -20,7 +20,7 @@ class IssuePolicy
      */
     public function view(User $user, Issue $issue): bool
     {
-        return $issue->project->user_id === $user->id;
+        return $user->canAccessProject($issue->project);
     }
 
     /**
@@ -36,7 +36,7 @@ class IssuePolicy
      */
     public function update(User $user, Issue $issue): bool
     {
-        return $issue->project->user_id === $user->id;
+        return $user->canAccessProject($issue->project);
     }
 
     /**
@@ -44,7 +44,7 @@ class IssuePolicy
      */
     public function delete(User $user, Issue $issue): bool
     {
-        return $issue->project->user_id === $user->id;
+        return $user->canAccessProject($issue->project);
     }
 
     /**
@@ -52,7 +52,7 @@ class IssuePolicy
      */
     public function restore(User $user, Issue $issue): bool
     {
-        return $issue->project->user_id === $user->id;
+        return $user->canAccessProject($issue->project);
     }
 
     /**
@@ -60,6 +60,6 @@ class IssuePolicy
      */
     public function forceDelete(User $user, Issue $issue): bool
     {
-        return $issue->project->user_id === $user->id;
+        return $user->canAccessProject($issue->project);
     }
 }

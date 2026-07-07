@@ -39,9 +39,10 @@ class SeniorQualityAssuranceAgent implements Agent, Conversational, HasStructure
 
         $artifactRules = match ($this->artifactType) {
             'test_plan' => implode(PHP_EOL, [
-                '- Produce one realistic QA test plan draft.',
+                '- Produce one realistic and comprehensive QA test plan draft.',
+                '- Include a clear description, scope, risk and mitigation, strategy, entry/exit criteria, and release readiness.',
+                '- Write risk and mitigation in realistic terms, with concrete examples and evidence from the provided context and write it inside test plan description.',
                 '- Keep status aligned to a draft workflow.',
-                '- Focus on scope/out of scope, testing strategy, entry/exit criteria, and release readiness.',
                 '- Use only allowed priority values from the provided context.',
             ]),
             'test_cases' => implode(PHP_EOL, [

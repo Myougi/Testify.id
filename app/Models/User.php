@@ -6,7 +6,9 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -62,5 +64,58 @@ class User extends Authenticatable
     public function testPlans(): HasMany
     {
         return $this->hasMany(TestPlan::class);
+    }
+
+    /**
+     * @return HasMany<Team, $this>
+     */
+    public function ownedTeams(): HasMany
+    {
+        return $this->hasMany(Team::class, 'owner_user_id');
+    }
+
+    /**
+     * @return HasMany<TeamMember, $this>
+     */
+    public function teamMemberships(): HasMany
+    {
+        return $this->hasMany(TeamMember::class);
+    }
+
+    /**
+     * @return BelongsToMany<Team, $this>
+     */
+    public function teams(): BelongsToMany
+    {
+        return $this->belongsToMany(Team::class, 'team_members')
+            ->withPivot('id', 'added_by_user_id')
+            ->withTimestamps();
+    }
+
+    /**
+     * @return Builder<Project>
+     */
+    public function accessibleProjects(): Builder
+    {
+        return Project::query()->accessibleTo($this);
+    }
+
+    public function ownsProject(Project $project): bool
+    {
+        return $project->user_id === $this->id;
+    }
+
+    public function canAccessProject(Project $project): bool
+    {
+        if ($this->ownsProject($project)) {
+            return true;
+        }
+
+        return ProjectTeamAccess::query()
+            ->where('project_id', $project->project_id)
+            ->whereIn('team_id', TeamMember::query()
+                ->select('team_id')
+                ->where('user_id', $this->id))
+            ->exists();
     }
 }

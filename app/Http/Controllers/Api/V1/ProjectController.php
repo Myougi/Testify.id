@@ -13,7 +13,7 @@ class ProjectController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = $request->user()->projects();
+        $query = $request->user()->accessibleProjects();
         $this->applyFilters($request, $query);
         $projects = $query->cursorPaginate(JsonApi::pageSize($request), cursor: $request->input('page.cursor'));
 
@@ -40,12 +40,12 @@ class ProjectController extends Controller
 
     public function show(Request $request, string $project): JsonResponse
     {
-        return $this->showResource($this->find($request, $project));
+        return $this->showResource($this->findAccessible($request, $project));
     }
 
     public function update(Request $request, string $project): JsonResponse
     {
-        $model = $this->find($request, $project);
+        $model = $this->findOwned($request, $project);
 
         if ($response = $this->precondition($request, $model)) {
             return $response;
@@ -71,7 +71,7 @@ class ProjectController extends Controller
 
     public function destroy(Request $request, string $project): JsonResponse
     {
-        $model = $this->find($request, $project);
+        $model = $this->findOwned($request, $project);
 
         if ($response = $this->precondition($request, $model)) {
             return $response;
@@ -91,7 +91,12 @@ class ProjectController extends Controller
         return JsonApi::noContent();
     }
 
-    private function find(Request $request, string $id): Project
+    private function findAccessible(Request $request, string $id): Project
+    {
+        return $request->user()->accessibleProjects()->whereKey($id)->firstOrFail();
+    }
+
+    private function findOwned(Request $request, string $id): Project
     {
         return $request->user()->projects()->whereKey($id)->firstOrFail();
     }

@@ -20,7 +20,7 @@ class ProjectPolicy
      */
     public function view(User $user, Project $project): bool
     {
-        return $project->user_id === $user->id;
+        return $user->canAccessProject($project);
     }
 
     /**
@@ -36,7 +36,7 @@ class ProjectPolicy
      */
     public function update(User $user, Project $project): bool
     {
-        return $project->user_id === $user->id;
+        return $user->ownsProject($project);
     }
 
     /**
@@ -44,7 +44,7 @@ class ProjectPolicy
      */
     public function delete(User $user, Project $project): bool
     {
-        return $project->user_id === $user->id;
+        return $user->ownsProject($project);
     }
 
     /**
@@ -52,7 +52,7 @@ class ProjectPolicy
      */
     public function restore(User $user, Project $project): bool
     {
-        return $project->user_id === $user->id;
+        return $user->ownsProject($project);
     }
 
     /**
@@ -60,6 +60,6 @@ class ProjectPolicy
      */
     public function forceDelete(User $user, Project $project): bool
     {
-        return $project->user_id === $user->id;
+        return $user->ownsProject($project);
     }
 }

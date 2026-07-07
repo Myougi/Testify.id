@@ -4,15 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Models\Project;
 use App\Services\DashboardService;
+use App\Services\ProjectAccessService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardPageController extends Controller
 {
-    public function __construct(public DashboardService $dashboardService)
-    {
-    }
+    public function __construct(
+        public DashboardService $dashboardService,
+        public ProjectAccessService $projectAccessService,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -33,8 +35,8 @@ class DashboardPageController extends Controller
             return null;
         }
 
-        return $request->user()
-            ->projects()
+        return $this->projectAccessService
+            ->accessibleProjectsQuery($request->user())
             ->whereKey((int) $activeProjectId)
             ->first();
     }

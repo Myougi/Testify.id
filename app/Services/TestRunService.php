@@ -72,7 +72,7 @@ class TestRunService
                 'testCases:id,project_id,module_id,case_key,title,priority,automation_status,test_behavior,test_type',
                 'testCases.module:id,name',
             ])
-            ->whereIn('project_id', $user->projects()->select('project_id'))
+            ->whereIn('project_id', $user->accessibleProjects()->select('project_id'))
             ->orderBy('name');
 
         if ($activeProjectId !== null) {
@@ -342,7 +342,7 @@ class TestRunService
             ])
             ->withCount('testCases')
             ->whereHas('testPlan.project', function (Builder $projectQuery) use ($user): void {
-                $projectQuery->where('user_id', $user->id);
+                $projectQuery->whereIn('project_id', $user->accessibleProjects()->select('project_id'));
             });
 
         if ($activeProjectId !== null) {

@@ -32,9 +32,9 @@ class UpdateTestRepositoryModuleRequest extends FormRequest
             'project_id' => [
                 'required',
                 'integer',
-                Rule::exists('projects', 'project_id')->where(
-                    'user_id',
-                    $this->user()?->id,
+                Rule::exists('projects', 'project_id')->whereIn(
+                    'project_id',
+                    $this->accessibleProjectIds(),
                 ),
             ],
             'parent_id' => ['nullable', 'integer', 'exists:test_repository_modules,id'],
@@ -91,5 +91,17 @@ class UpdateTestRepositoryModuleRequest extends FormRequest
                 }
             },
         ];
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function accessibleProjectIds(): array
+    {
+        return $this->user()
+            ?->accessibleProjects()
+            ->pluck('project_id')
+            ->map(fn (mixed $projectId): int => (int) $projectId)
+            ->all() ?? [];
     }
 }
