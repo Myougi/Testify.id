@@ -2,8 +2,11 @@
 
 namespace App\Providers;
 
+use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Http\Responses\LoginResponse as LoginResponseImplementation;
+use App\Http\Responses\RegisterResponse as RegisterResponseImplementation;
+use App\Models\TeamInvitation;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -12,6 +15,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
+use Laravel\Fortify\Contracts\RegisterResponse as RegisterResponseContract;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
 
@@ -23,6 +27,7 @@ class FortifyServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(LoginResponseContract::class, LoginResponseImplementation::class);
+        $this->app->singleton(RegisterResponseContract::class, RegisterResponseImplementation::class);
     }
 
     /**
@@ -40,6 +45,7 @@ class FortifyServiceProvider extends ServiceProvider
      */
     private function configureActions(): void
     {
+        Fortify::createUsersUsing(CreateNewUser::class);
         Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
     }
 
@@ -53,6 +59,8 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->boolean('expired')
                 ? __('Your session expired. Please log in again.')
                 : $request->session()->get('status'),
+            'email' => $request->string('email')->toString(),
+            'redirect' => $request->string('redirect')->toString(),
         ]));
 
         Fortify::resetPasswordView(fn (Request $request) => Inertia::render('auth/ResetPassword', [
@@ -65,6 +73,27 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->session()->get('status'),
         ]));
 
+        Fortify::registerView(function (Request $request) {
+            $token = trim((string) $request->query('team_invitation', ''));
+            $invitation = $token !== ''
+                ? TeamInvitation::query()
+                    ->with('team.owner')
+                    ->where('token', $token)
+                    ->first()
+                : null;
+
+            return Inertia::render('auth/Register', [
+                'email' => $request->string('email')->toString(),
+                'teamInvitation' => $invitation instanceof TeamInvitation
+                    ? [
+                        'token' => $invitation->token,
+                        'email' => $invitation->email,
+                        'teamName' => $invitation->team?->name,
+                        'inviterName' => $invitation->team?->owner?->name,
+                    ]
+                    : null,
+            ]);
+        });
     }
 
     /**

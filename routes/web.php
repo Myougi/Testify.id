@@ -11,6 +11,9 @@ use App\Http\Controllers\IssueAttachmentController;
 use App\Http\Controllers\IssuePageController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ReportPageController;
+use App\Http\Controllers\TeamController;
+use App\Http\Controllers\TeamInvitationController;
+use App\Http\Controllers\TeamPageController;
 use App\Http\Controllers\TestPlanPageController;
 use App\Http\Controllers\TestRepositoryPageController;
 use App\Http\Controllers\TestRunPageController;
@@ -18,8 +21,26 @@ use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'Welcome')->name('home');
 
+Route::controller(TeamInvitationController::class)->group(function (): void {
+    Route::get('team-invitations/{teamInvitation}', 'show')->name('team-invitations.show');
+    Route::post('team-invitations/{teamInvitation}/accept', 'accept')
+        ->middleware('auth')
+        ->name('team-invitations.accept');
+    Route::post('team-invitations/{teamInvitation}/register', 'register')
+        ->middleware('guest')
+        ->name('team-invitations.register');
+});
+
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', [DashboardPageController::class, 'index'])->name('dashboard');
+    Route::get('teams', TeamPageController::class)->name('teams.index');
+    Route::post('teams', [TeamController::class, 'store'])->name('teams.store');
+    Route::put('teams/{team}', [TeamController::class, 'update'])->name('teams.update');
+    Route::delete('teams/{team}', [TeamController::class, 'destroy'])->name('teams.destroy');
+    Route::post('teams/{team}/members', [TeamController::class, 'storeMember'])->name('teams.members.store');
+    Route::delete('teams/{team}/members/{teamMember}', [TeamController::class, 'destroyMember'])->name('teams.members.destroy');
+    Route::post('teams/{team}/project-access', [TeamController::class, 'storeProjectAccess'])->name('teams.project-access.store');
+    Route::delete('teams/{team}/project-access/{projectTeamAccess}', [TeamController::class, 'destroyProjectAccess'])->name('teams.project-access.destroy');
     Route::get('projects/{project}/workspace', [ProjectController::class, 'workspace'])
         ->name('projects.workspace');
     Route::resource('projects', ProjectController::class)->only(['index', 'store', 'update', 'destroy']);

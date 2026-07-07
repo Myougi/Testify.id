@@ -12,6 +12,7 @@ use App\Http\Resources\TestPlanResource;
 use App\Http\Resources\TestRepositoryModuleResource;
 use App\Models\TestCase;
 use App\Models\TestPlan;
+use App\Services\ProjectAccessService;
 use App\Services\TestPlanService;
 use App\Services\TestRepositoryService;
 use Illuminate\Http\JsonResponse;
@@ -24,6 +25,7 @@ class TestPlanController extends Controller
     public function __construct(
         public TestPlanService $testPlanService,
         public TestRepositoryService $testRepositoryService,
+        public ProjectAccessService $projectAccessService,
     ) {}
 
     /**
@@ -215,8 +217,8 @@ class TestPlanController extends Controller
             return null;
         }
 
-        $projectExists = $request->user()
-            ->projects()
+        $projectExists = $this->projectAccessService
+            ->accessibleProjectsQuery($request->user())
             ->whereKey((int) $activeProjectId)
             ->exists();
 

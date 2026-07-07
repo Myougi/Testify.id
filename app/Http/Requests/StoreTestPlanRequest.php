@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\TestPlan;
+use App\Services\ProjectAccessService;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -29,9 +30,9 @@ class StoreTestPlanRequest extends FormRequest
             'project_id' => [
                 'required',
                 'integer',
-                Rule::exists('projects', 'project_id')->where(
-                    'user_id',
-                    $this->user()?->id,
+                Rule::exists('projects', 'project_id')->whereIn(
+                    'project_id',
+                    $this->accessibleProjectIds(),
                 ),
             ],
             'name' => ['required', 'string', 'max:255'],
@@ -68,6 +69,20 @@ class StoreTestPlanRequest extends FormRequest
     {
         $activeProjectId = $this->session()->get('qa_workspace_project_id');
 
-        return is_numeric($activeProjectId) ? (int) $activeProjectId : null;
+        return app(ProjectAccessService::class)
+            ->resolveAccessibleProject($this->user(), $activeProjectId)
+            ?->project_id;
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function accessibleProjectIds(): array
+    {
+        return $this->user()
+            ?->accessibleProjects()
+            ->pluck('project_id')
+            ->map(fn (mixed $projectId): int => (int) $projectId)
+            ->all() ?? [];
     }
 }

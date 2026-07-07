@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Models\TestCase;
+use App\Services\Api\V1\AuditService;
+use App\Services\Api\V1\IdempotencyService;
 use App\Services\TestRepositoryService;
 use App\Support\Api\V1\JsonApi;
 use App\Support\Api\V1\ResourceSerializer;
@@ -14,8 +16,8 @@ use Illuminate\Validation\ValidationException;
 class TestCaseController extends Controller
 {
     public function __construct(
-        \App\Services\Api\V1\AuditService $audit,
-        \App\Services\Api\V1\IdempotencyService $idempotency,
+        AuditService $audit,
+        IdempotencyService $idempotency,
         private readonly TestRepositoryService $repositoryService,
     ) {
         parent::__construct($audit, $idempotency);
@@ -25,7 +27,7 @@ class TestCaseController extends Controller
     {
         $query = TestCase::query()
             ->with($request->string('include')->contains('steps') ? ['steps'] : [])
-            ->whereIn('project_id', $request->user()->projects()->select('project_id'));
+            ->whereIn('project_id', $request->user()->accessibleProjects()->select('project_id'));
 
         foreach ([
             'project' => 'project_id',
@@ -110,7 +112,7 @@ class TestCaseController extends Controller
     private function find(Request $request, string $id): TestCase
     {
         return TestCase::query()
-            ->whereIn('project_id', $request->user()->projects()->select('project_id'))
+            ->whereIn('project_id', $request->user()->accessibleProjects()->select('project_id'))
             ->whereKey($id)
             ->firstOrFail();
     }
@@ -129,7 +131,7 @@ class TestCaseController extends Controller
             'project_id' => [
                 $presence,
                 'integer',
-                Rule::exists('projects', 'project_id')->where('user_id', $request->user()->id)->whereNull('deleted_at'),
+                Rule::exists('projects', 'project_id')->whereNull('deleted_at'),
             ],
             'module_id' => [
                 $presence,

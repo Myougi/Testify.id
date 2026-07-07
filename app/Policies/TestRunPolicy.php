@@ -20,7 +20,7 @@ class TestRunPolicy
      */
     public function view(User $user, TestRun $testRun): bool
     {
-        return $testRun->testPlan->project->user_id === $user->id;
+        return $user->canAccessProject($testRun->testPlan->project);
     }
 
     /**
@@ -36,7 +36,7 @@ class TestRunPolicy
      */
     public function update(User $user, TestRun $testRun): bool
     {
-        return $testRun->testPlan->project->user_id === $user->id;
+        return $user->canAccessProject($testRun->testPlan->project);
     }
 
     /**
@@ -44,7 +44,7 @@ class TestRunPolicy
      */
     public function delete(User $user, TestRun $testRun): bool
     {
-        return $testRun->testPlan->project->user_id === $user->id;
+        return $user->canAccessProject($testRun->testPlan->project);
     }
 
     /**
@@ -52,7 +52,7 @@ class TestRunPolicy
      */
     public function restore(User $user, TestRun $testRun): bool
     {
-        return $testRun->testPlan->project->user_id === $user->id;
+        return $user->canAccessProject($testRun->testPlan->project);
     }
 
     /**
@@ -60,6 +60,6 @@ class TestRunPolicy
      */
     public function forceDelete(User $user, TestRun $testRun): bool
     {
-        return $testRun->testPlan->project->user_id === $user->id;
+        return $user->canAccessProject($testRun->testPlan->project);
     }
 }

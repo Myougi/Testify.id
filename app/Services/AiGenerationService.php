@@ -116,7 +116,7 @@ class AiGenerationService
 
         if ($artifactType === 'test_plan') {
             $project = $requestedProjectId
-                ? $user->projects()->whereKey($requestedProjectId)->first()
+                ? $user->accessibleProjects()->whereKey($requestedProjectId)->first()
                 : $activeProject;
 
             if (! $project instanceof Project) {

@@ -9,6 +9,7 @@ use App\Http\Resources\TestRepositoryModuleResource;
 use App\Http\Resources\TestRunCollection;
 use App\Models\TestCase;
 use App\Models\TestPlan;
+use App\Services\ProjectAccessService;
 use App\Services\TestPlanPdfService;
 use App\Services\TestPlanService;
 use App\Services\TestRepositoryService;
@@ -27,6 +28,7 @@ class TestPlanPageController extends Controller
         public TestPlanPdfService $testPlanPdfService,
         public TestRepositoryService $testRepositoryService,
         public TestRunService $testRunService,
+        public ProjectAccessService $projectAccessService,
     ) {}
 
     /**
@@ -153,8 +155,8 @@ class TestPlanPageController extends Controller
             return null;
         }
 
-        $projectExists = $request->user()
-            ->projects()
+        $projectExists = $this->projectAccessService
+            ->accessibleProjectsQuery($request->user())
             ->whereKey((int) $activeProjectId)
             ->exists();
 

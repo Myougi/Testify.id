@@ -4,8 +4,9 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Models\Issue;
 use App\Models\Project;
-use App\Models\TestPlan;
 use App\Models\TestRun;
+use App\Services\Api\V1\AuditService;
+use App\Services\Api\V1\IdempotencyService;
 use App\Services\IssueService;
 use App\Support\Api\V1\JsonApi;
 use App\Support\Api\V1\ResourceSerializer;
@@ -17,8 +18,8 @@ use Illuminate\Validation\ValidationException;
 class IssueController extends Controller
 {
     public function __construct(
-        \App\Services\Api\V1\AuditService $audit,
-        \App\Services\Api\V1\IdempotencyService $idempotency,
+        AuditService $audit,
+        IdempotencyService $idempotency,
         private readonly IssueService $issueService,
     ) {
         parent::__construct($audit, $idempotency);
@@ -27,7 +28,7 @@ class IssueController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Issue::query()
-            ->whereIn('project_id', $request->user()->projects()->select('project_id'));
+            ->whereIn('project_id', $request->user()->accessibleProjects()->select('project_id'));
 
         foreach ([
             'project' => 'project_id',
@@ -112,7 +113,7 @@ class IssueController extends Controller
     private function find(Request $request, string $id): Issue
     {
         return Issue::query()
-            ->whereIn('project_id', $request->user()->projects()->select('project_id'))
+            ->whereIn('project_id', $request->user()->accessibleProjects()->select('project_id'))
             ->whereKey($id)
             ->firstOrFail();
     }
@@ -126,7 +127,7 @@ class IssueController extends Controller
         $projectId = (int) data_get(JsonApi::relationship($request, 'project'), 'id', $issue?->project_id);
         $planId = data_get(JsonApi::relationship($request, 'test_plan'), 'id', $issue?->test_plan_id);
         $runId = data_get(JsonApi::relationship($request, 'test_run'), 'id', $issue?->test_run_id);
-        $project = $request->user()->projects()->whereKey($projectId)->firstOrFail();
+        $project = $request->user()->accessibleProjects()->whereKey($projectId)->firstOrFail();
         $presence = $partial ? 'sometimes' : 'required';
         $data = validator([
             ...$attributes,

@@ -6,6 +6,7 @@ use App\Models\Project;
 use App\Models\TestCase;
 use App\Models\TestPlan;
 use App\Models\TestRepositoryModule;
+use App\Services\ProjectAccessService;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -27,10 +28,7 @@ class StoreBulkTestCasesRequest extends FormRequest
             'project_id' => [
                 'required',
                 'integer',
-                Rule::exists('projects', 'project_id')->where(
-                    'user_id',
-                    $this->user()?->id,
-                ),
+                Rule::exists('projects', 'project_id'),
             ],
             'module_id' => ['required', 'integer', 'exists:test_repository_modules,id'],
             'test_plan_id' => ['required', 'integer', 'exists:test_plans,id'],
@@ -106,8 +104,8 @@ class StoreBulkTestCasesRequest extends FormRequest
             return null;
         }
 
-        return $this->user()
-            ->projects()
+        return app(ProjectAccessService::class)
+            ->accessibleProjectsQuery($this->user())
             ->whereKey((int) $activeProjectId)
             ->first();
     }

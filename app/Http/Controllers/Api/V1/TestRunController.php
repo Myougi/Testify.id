@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Models\TestPlan;
 use App\Models\TestRun;
+use App\Services\Api\V1\AuditService;
+use App\Services\Api\V1\IdempotencyService;
 use App\Services\TestRunService;
 use App\Support\Api\V1\JsonApi;
 use App\Support\Api\V1\ResourceSerializer;
@@ -15,8 +17,8 @@ use Illuminate\Validation\ValidationException;
 class TestRunController extends Controller
 {
     public function __construct(
-        \App\Services\Api\V1\AuditService $audit,
-        \App\Services\Api\V1\IdempotencyService $idempotency,
+        AuditService $audit,
+        IdempotencyService $idempotency,
         private readonly TestRunService $testRunService,
     ) {
         parent::__construct($audit, $idempotency);
@@ -26,7 +28,8 @@ class TestRunController extends Controller
     {
         $query = TestRun::query()
             ->with($request->string('include')->contains('test_cases') ? ['testCases'] : [])
-            ->whereHas('testPlan.project', fn ($project) => $project->where('user_id', $request->user()->id));
+            ->whereHas('testPlan.project', fn ($project) => $project
+                ->whereIn('project_id', $request->user()->accessibleProjects()->select('project_id')));
 
         foreach (['test_plan' => 'test_plan_id', 'status' => 'status', 'priority' => 'priority', 'environment' => 'environment'] as $filter => $column) {
             if ($value = $request->input("filter.{$filter}")) {
@@ -135,7 +138,8 @@ class TestRunController extends Controller
     private function find(Request $request, string $id): TestRun
     {
         return TestRun::query()
-            ->whereHas('testPlan.project', fn ($project) => $project->where('user_id', $request->user()->id))
+            ->whereHas('testPlan.project', fn ($project) => $project
+                ->whereIn('project_id', $request->user()->accessibleProjects()->select('project_id')))
             ->whereKey($id)
             ->firstOrFail();
     }
@@ -155,7 +159,7 @@ class TestRunController extends Controller
                 'integer',
                 Rule::exists('test_plans', 'id')->whereIn(
                     'project_id',
-                    $request->user()->projects()->pluck('project_id')->all(),
+                    $request->user()->accessibleProjects()->pluck('project_id')->all(),
                 )->whereNull('deleted_at'),
             ],
             'name' => [$presence, 'string', 'max:255'],

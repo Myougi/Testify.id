@@ -5,14 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\AiGenerationService;
+use App\Services\ProjectAccessService;
 use App\Services\ReportPdfService;
 use App\Services\ReportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
 class ReportPageController extends Controller
@@ -21,6 +22,7 @@ class ReportPageController extends Controller
         public ReportService $reportService,
         public AiGenerationService $aiGenerationService,
         public ReportPdfService $reportPdfService,
+        public ProjectAccessService $projectAccessService,
     ) {}
 
     public function index(Request $request): InertiaResponse
@@ -153,8 +155,8 @@ class ReportPageController extends Controller
             return null;
         }
 
-        return $request->user()
-            ->projects()
+        return $this->projectAccessService
+            ->accessibleProjectsQuery($request->user())
             ->whereKey((int) $activeProjectId)
             ->first();
     }

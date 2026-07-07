@@ -20,7 +20,7 @@ class TestRepositoryModulePolicy
      */
     public function view(User $user, TestRepositoryModule $testRepositoryModule): bool
     {
-        return $testRepositoryModule->project->user_id === $user->id;
+        return $user->canAccessProject($testRepositoryModule->project);
     }
 
     /**
@@ -36,7 +36,7 @@ class TestRepositoryModulePolicy
      */
     public function update(User $user, TestRepositoryModule $testRepositoryModule): bool
     {
-        return $testRepositoryModule->project->user_id === $user->id;
+        return $user->canAccessProject($testRepositoryModule->project);
     }
 
     /**
@@ -44,7 +44,7 @@ class TestRepositoryModulePolicy
      */
     public function delete(User $user, TestRepositoryModule $testRepositoryModule): bool
     {
-        return $testRepositoryModule->project->user_id === $user->id;
+        return $user->canAccessProject($testRepositoryModule->project);
     }
 
     /**
@@ -52,7 +52,7 @@ class TestRepositoryModulePolicy
      */
     public function restore(User $user, TestRepositoryModule $testRepositoryModule): bool
     {
-        return $testRepositoryModule->project->user_id === $user->id;
+        return $user->canAccessProject($testRepositoryModule->project);
     }
 
     /**
@@ -60,6 +60,6 @@ class TestRepositoryModulePolicy
      */
     public function forceDelete(User $user, TestRepositoryModule $testRepositoryModule): bool
     {
-        return $testRepositoryModule->project->user_id === $user->id;
+        return $user->canAccessProject($testRepositoryModule->project);
     }
 }

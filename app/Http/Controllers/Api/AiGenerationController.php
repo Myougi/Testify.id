@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\GenerateAiDraftRequest;
 use App\Models\Project;
 use App\Services\AiGenerationService;
+use App\Services\ProjectAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,8 +14,8 @@ class AiGenerationController extends Controller
 {
     public function __construct(
         public AiGenerationService $aiGenerationService,
-    ) {
-    }
+        public ProjectAccessService $projectAccessService,
+    ) {}
 
     public function store(GenerateAiDraftRequest $request): JsonResponse
     {
@@ -35,8 +36,8 @@ class AiGenerationController extends Controller
             return null;
         }
 
-        return $request->user()
-            ->projects()
+        return $this->projectAccessService
+            ->accessibleProjectsQuery($request->user())
             ->whereKey((int) $activeProjectId)
             ->first();
     }

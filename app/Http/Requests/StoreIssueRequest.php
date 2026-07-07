@@ -6,6 +6,7 @@ use App\Models\Issue;
 use App\Models\Project;
 use App\Models\TestPlan;
 use App\Models\TestRun;
+use App\Services\ProjectAccessService;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -92,8 +93,8 @@ class StoreIssueRequest extends FormRequest
             return null;
         }
 
-        return $this->user()
-            ->projects()
+        return app(ProjectAccessService::class)
+            ->accessibleProjectsQuery($this->user())
             ->whereKey($activeProjectId)
             ->first();
     }
@@ -132,6 +133,8 @@ class StoreIssueRequest extends FormRequest
     {
         $activeProjectId = $this->session()->get('qa_workspace_project_id');
 
-        return is_numeric($activeProjectId) ? (int) $activeProjectId : null;
+        return app(ProjectAccessService::class)
+            ->resolveAccessibleProject($this->user(), $activeProjectId)
+            ?->project_id;
     }
 }

@@ -7,6 +7,7 @@ use App\Http\Resources\TestCaseResource;
 use App\Http\Resources\TestRepositoryModuleResource;
 use App\Models\Project;
 use App\Models\TestCase;
+use App\Services\ProjectAccessService;
 use App\Services\TestCaseGenerationCountResolver;
 use App\Services\TestRepositoryService;
 use Illuminate\Http\Request;
@@ -20,6 +21,7 @@ class TestRepositoryPageController extends Controller
     public function __construct(
         public TestRepositoryService $testRepositoryService,
         public TestCaseGenerationCountResolver $testCaseGenerationCountResolver,
+        public ProjectAccessService $projectAccessService,
     ) {}
 
     /**
@@ -141,8 +143,8 @@ class TestRepositoryPageController extends Controller
             return null;
         }
 
-        return $request->user()
-            ->projects()
+        return $this->projectAccessService
+            ->accessibleProjectsQuery($request->user())
             ->whereKey($activeProjectId)
             ->first();
     }
@@ -155,8 +157,8 @@ class TestRepositoryPageController extends Controller
             return null;
         }
 
-        $projectExists = $request->user()
-            ->projects()
+        $projectExists = $this->projectAccessService
+            ->accessibleProjectsQuery($request->user())
             ->whereKey((int) $activeProjectId)
             ->exists();
 

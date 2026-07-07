@@ -28,8 +28,10 @@
     import Pencil from 'lucide-svelte/icons/pencil';
     import Plus from 'lucide-svelte/icons/plus';
     import Trash2 from 'lucide-svelte/icons/trash-2';
+    import Users from 'lucide-svelte/icons/users';
     import AppHead from '@/components/AppHead.svelte';
     import InputError from '@/components/InputError.svelte';
+    import { Badge } from '@/components/ui/badge';
     import { Button } from '@/components/ui/button';
     import {
         Dialog,
@@ -54,7 +56,9 @@
         index as projectsIndex,
         store,
         update,
+        workspace,
     } from '@/routes/projects';
+    import { index as teamsIndex } from '@/routes/teams';
 
     type Project = {
         project_id: number;
@@ -68,6 +72,8 @@
         execution_progress: number;
         open_issues_count: number;
         created_at: string;
+        is_owned: boolean;
+        access_type: 'owned' | 'shared';
     };
 
     type Stats = {
@@ -96,7 +102,7 @@
         {
             title: 'Total Project',
             value: String(stats.totalProjects),
-            detail: 'All projects in the workspace',
+            detail: 'All projects you can access',
             detailClass: 'text-slate-500',
             href: projectsIndex(),
         },
@@ -168,13 +174,14 @@
                         </Button>
                     {/snippet}
                 </DialogTrigger>
-                <DialogContent class="border-slate-200 bg-white text-[#071a2f]">
-                    <DialogTitle>Create New Project</DialogTitle>
-                    <Form
-                        {...store.form()}
-                        resetOnSuccess
-                        onSuccess={() => (createOpen = false)}
-                        class="mt-5 grid gap-4"
+                    <DialogContent class="border-slate-200 bg-white text-[#071a2f]">
+                        <DialogTitle>Create New Project</DialogTitle>
+                        <Form
+                            action={store.url()}
+                            method="post"
+                            resetOnSuccess
+                            onSuccess={() => (createOpen = false)}
+                            class="mt-5 grid gap-4"
                     >
                         {#snippet children({ errors, processing })}
                             <div class="grid gap-2">
@@ -297,9 +304,20 @@
                                 >
                                     <Icon class="size-5" />
                                 </span>
-                                <h2 class="text-base font-bold">
-                                    {project.project_name}
-                                </h2>
+                                <div class="space-y-2">
+                                    <Badge
+                                        class={`w-fit border-0 ${
+                                            project.is_owned
+                                                ? 'bg-emerald-100 text-emerald-700'
+                                                : 'bg-amber-100 text-amber-700'
+                                        }`}
+                                    >
+                                        {project.is_owned ? 'Owned' : 'Shared'}
+                                    </Badge>
+                                    <h2 class="text-base font-bold">
+                                        {project.project_name}
+                                    </h2>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -374,78 +392,95 @@
                                 {#snippet children(props)}
                                     <Link
                                         {...props}
-                                        href={`/projects/${project.project_id}/workspace`}
+                                        href={workspace(project)}
                                         class={props.class}
                                     >
-                                        View Project
+                                        Open Workspace
                                     </Link>
                                 {/snippet}
                             </Button>
-                            <div class="relative shrink-0">
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        {#snippet children(props)}
-                                            <Button
-                                                {...props}
-                                                variant="outline"
-                                                size="icon"
-                                                class="h-11 w-11 rounded-2xl border-slate-200 bg-white shadow-sm hover:bg-slate-50"
-                                                aria-label={`Actions for ${project.project_name}`}
+                            {#if project.is_owned}
+                                <div class="relative shrink-0">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            {#snippet children(props)}
+                                                <Button
+                                                    {...props}
+                                                    variant="outline"
+                                                    size="icon"
+                                                    class="h-11 w-11 rounded-2xl border-slate-200 bg-white shadow-sm hover:bg-slate-50"
+                                                    aria-label={`Actions for ${project.project_name}`}
+                                                >
+                                                    <EllipsisVertical
+                                                        class="size-4"
+                                                    />
+                                                </Button>
+                                            {/snippet}
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent
+                                            align="end"
+                                            sideOffset={8}
+                                            class="w-48 rounded-2xl border-slate-200 p-2 shadow-xl"
+                                        >
+                                            <DropdownMenuItem
+                                                class="gap-2 rounded-xl px-3 py-2"
+                                                asChild
                                             >
-                                                <EllipsisVertical
-                                                    class="size-4"
-                                                />
-                                            </Button>
-                                        {/snippet}
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                        align="end"
-                                        sideOffset={8}
-                                        class="w-44 rounded-2xl border-slate-200 p-2 shadow-xl"
-                                    >
-                                        <DropdownMenuItem
-                                            class="gap-2 rounded-xl px-3 py-2"
-                                            asChild
-                                        >
-                                            {#snippet children(menuProps)}
-                                                <button
-                                                    id={`edit-project-${project.project_id}`}
-                                                    type="button"
-                                                    class={menuProps.class}
-                                                    onclick={() => {
-                                                        menuProps.onClick?.();
-                                                        editingProject =
-                                                            project;
-                                                    }}
-                                                >
-                                                    <Pencil class="size-4" />
-                                                    Edit
-                                                </button>
-                                            {/snippet}
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            class="gap-2 rounded-xl px-3 py-2 text-red-600 hover:text-red-700"
-                                            asChild
-                                        >
-                                            {#snippet children(menuProps)}
-                                                <button
-                                                    id={`delete-project-${project.project_id}`}
-                                                    type="button"
-                                                    class={menuProps.class}
-                                                    onclick={() => {
-                                                        menuProps.onClick?.();
-                                                        deletingProject =
-                                                            project;
-                                                    }}
-                                                >
-                                                    <Trash2 class="size-4" />
-                                                    Delete
-                                                </button>
-                                            {/snippet}
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </div>
+                                                {#snippet children(menuProps)}
+                                                    <button
+                                                        id={`edit-project-${project.project_id}`}
+                                                        type="button"
+                                                        class={menuProps.class}
+                                                        onclick={() => {
+                                                            menuProps.onClick?.();
+                                                            editingProject =
+                                                                project;
+                                                        }}
+                                                    >
+                                                        <Pencil class="size-4" />
+                                                        Edit
+                                                    </button>
+                                                {/snippet}
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                class="gap-2 rounded-xl px-3 py-2"
+                                                asChild
+                                            >
+                                                {#snippet children(menuProps)}
+                                                    <Link
+                                                        {...menuProps}
+                                                        href={teamsIndex()}
+                                                        class={menuProps.class}
+                                                    >
+                                                        <Users class="size-4" />
+                                                        Manage Teams
+                                                    </Link>
+                                                {/snippet}
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                class="gap-2 rounded-xl px-3 py-2 text-red-600 hover:text-red-700"
+                                                asChild
+                                            >
+                                                {#snippet children(menuProps)}
+                                                    <button
+                                                        id={`delete-project-${project.project_id}`}
+                                                        type="button"
+                                                        class={menuProps.class}
+                                                        onclick={() => {
+                                                            menuProps.onClick?.();
+                                                            deletingProject =
+                                                                project;
+                                                        }}
+                                                    >
+                                                        <Trash2 class="size-4" />
+                                                        Delete
+                                                    </button>
+                                                {/snippet}
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            {/if}
                         </div>
 
                         {#if issueCount > 0}
@@ -502,11 +537,13 @@
             {@const project = editingProject}
             {#key project.project_id}
                 <Form
-                    {...update.form(project)}
+                    action={update.url(project)}
+                    method="post"
                     onSuccess={() => (editingProject = null)}
                     class="mt-5 grid gap-4"
                 >
                     {#snippet children({ errors, processing })}
+                        <input type="hidden" name="_method" value="PUT" />
                         <div class="grid gap-2">
                             <Label for="edit_project_name">Project name</Label>
                             <Input
@@ -576,11 +613,13 @@
         {#if deletingProject}
             {@const project = deletingProject}
             <Form
-                {...destroy.form(project)}
+                action={destroy.url(project)}
+                method="post"
                 onSuccess={() => (deletingProject = null)}
                 class="mt-5"
             >
                 {#snippet children({ processing })}
+                    <input type="hidden" name="_method" value="DELETE" />
                     <div
                         class="rounded-lg border border-slate-200 bg-slate-50 p-4"
                     >

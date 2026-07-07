@@ -58,7 +58,7 @@ class TestPlanService
      */
     public function getProjectOptions(User $user): array
     {
-        return $user->projects()
+        return $user->accessibleProjects()
             ->orderBy('project_name')
             ->get(['project_id', 'project_name'])
             ->map(fn (Project $project): array => [
@@ -200,7 +200,7 @@ class TestPlanService
                 'project:project_id,project_name,user_id',
             ])
             ->withCount('testCases')
-            ->whereIn('project_id', $user->projects()->select('project_id'));
+            ->whereIn('project_id', $user->accessibleProjects()->select('project_id'));
 
         if ($activeProjectId !== null) {
             $query->where('project_id', $activeProjectId);

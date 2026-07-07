@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\TestPlan;
 use App\Models\TestRun;
+use App\Services\ProjectAccessService;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -97,7 +98,7 @@ class StoreTestRunRequest extends FormRequest
     private function userProjectIds(): array
     {
         return $this->user()
-            ?->projects()
+            ?->accessibleProjects()
             ->pluck('project_id')
             ->map(fn (mixed $projectId): int => (int) $projectId)
             ->all() ?? [];
@@ -107,6 +108,8 @@ class StoreTestRunRequest extends FormRequest
     {
         $activeProjectId = $this->session()->get('qa_workspace_project_id');
 
-        return is_numeric($activeProjectId) ? (int) $activeProjectId : null;
+        return app(ProjectAccessService::class)
+            ->resolveAccessibleProject($this->user(), $activeProjectId)
+            ?->project_id;
     }
 }

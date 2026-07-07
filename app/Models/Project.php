@@ -4,9 +4,11 @@ namespace App\Models;
 
 use Database\Factories\ProjectFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
@@ -73,5 +75,32 @@ class Project extends Model
     public function issues(): HasMany
     {
         return $this->hasMany(Issue::class, 'project_id', 'project_id');
+    }
+
+    /**
+     * @return BelongsToMany<Team, $this>
+     */
+    public function teams(): BelongsToMany
+    {
+        return $this->belongsToMany(Team::class, 'project_team_accesses', 'project_id', 'team_id', 'project_id')
+            ->withPivot('id', 'granted_by_user_id')
+            ->withTimestamps();
+    }
+
+    /**
+     * @param  Builder<Project>  $query
+     * @return Builder<Project>
+     */
+    public function scopeAccessibleTo(Builder $query, User $user): Builder
+    {
+        return $query->where(function (Builder $accessQuery) use ($user): void {
+            $accessQuery
+                ->where('user_id', $user->id)
+                ->orWhereIn('project_id', ProjectTeamAccess::query()
+                    ->select('project_id')
+                    ->whereIn('team_id', TeamMember::query()
+                        ->select('team_id')
+                        ->where('user_id', $user->id)));
+        })->distinct();
     }
 }

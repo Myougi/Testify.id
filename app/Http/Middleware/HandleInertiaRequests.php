@@ -2,11 +2,14 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\ProjectAccessService;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
+    public function __construct(public ProjectAccessService $projectAccessService) {}
+
     /**
      * The root template that's loaded on the first page visit.
      *
@@ -39,8 +42,8 @@ class HandleInertiaRequests extends Middleware
         $activeProject = null;
 
         if ($request->user() && is_numeric($activeProjectId)) {
-            $project = $request->user()
-                ->projects()
+            $project = $this->projectAccessService
+                ->accessibleProjectsQuery($request->user())
                 ->whereKey((int) $activeProjectId)
                 ->first(['project_id', 'project_name']);
 

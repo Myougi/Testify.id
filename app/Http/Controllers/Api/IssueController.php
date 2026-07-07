@@ -10,6 +10,7 @@ use App\Http\Resources\IssueResource;
 use App\Models\Issue;
 use App\Models\Project;
 use App\Services\IssueService;
+use App\Services\ProjectAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -17,7 +18,10 @@ use Illuminate\Support\Facades\Gate;
 
 class IssueController extends Controller
 {
-    public function __construct(public IssueService $issueService) {}
+    public function __construct(
+        public IssueService $issueService,
+        public ProjectAccessService $projectAccessService,
+    ) {}
 
     /**
      * Display a listing of the resource.
@@ -133,8 +137,8 @@ class IssueController extends Controller
             return null;
         }
 
-        return $request->user()
-            ->projects()
+        return $this->projectAccessService
+            ->accessibleProjectsQuery($request->user())
             ->whereKey((int) $activeProjectId)
             ->first();
     }
