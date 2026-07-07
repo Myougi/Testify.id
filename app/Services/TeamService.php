@@ -83,7 +83,7 @@ class TeamService
                 'email' => $normalizedEmail,
                 'token' => Str::random(40),
                 'invited_by_user_id' => $actor->id,
-                'expires_at' => now()->addDays(7),
+                'expires_at' => now()->addDays(3),
             ]);
 
             Notification::route('mail', $normalizedEmail)

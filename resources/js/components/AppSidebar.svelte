@@ -9,7 +9,6 @@
     import FolderGit2 from 'lucide-svelte/icons/folder-git-2';
     import LayoutGrid from 'lucide-svelte/icons/layout-grid';
     import ListChecks from 'lucide-svelte/icons/list-checks';
-    import Users from 'lucide-svelte/icons/users';
     import type { Snippet } from 'svelte';
     import AppLogoIcon from '@/components/AppLogoIcon.svelte';
     import NavFooter from '@/components/NavFooter.svelte';
@@ -32,7 +31,6 @@
     import { index as testExecutionsIndex } from '@/routes/test-executions';
     import { index as testPlansIndex } from '@/routes/test-plans';
     import { index as testRepositoriesIndex } from '@/routes/test-repositories';
-    import { index as teamsIndex } from '@/routes/teams';
     import type { NavItem } from '@/types';
 
     let {
@@ -78,11 +76,6 @@
             title: 'Reports',
             href: reportsIndex(),
             icon: BarChart3,
-        },
-        {
-            title: 'Teams',
-            href: teamsIndex(),
-            icon: Users,
         },
     ];
 

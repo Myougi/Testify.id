@@ -21,7 +21,7 @@ class ProjectAccessService
      */
     public function ownedProjectsQuery(User $user): Builder
     {
-        return $user->projects();
+        return $user->projects()->getQuery();
     }
 
     public function resolveAccessibleProject(?User $user, mixed $projectId): ?Project

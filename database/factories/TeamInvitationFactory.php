@@ -26,7 +26,7 @@ class TeamInvitationFactory extends Factory
             'token' => Str::random(40),
             'invited_by_user_id' => User::factory(),
             'invited_user_id' => null,
-            'expires_at' => now()->addDays(7),
+            'expires_at' => now()->addDays(3),
             'accepted_at' => null,
         ];
     }
